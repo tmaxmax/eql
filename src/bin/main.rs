@@ -1,7 +1,7 @@
 use eql::lexer;
 
 fn main() {
-  let res = lexer::lex("\r\nCreate Science! Add Michael, аника аншоы and 孫德明 to Science.\nGet Science. Get Engineering?    ");
+  let res = lexer::lex("src/parser.rs:34:1");
   res.map_or_else(
     |err| println!("{}", err),
     |tokens| {
