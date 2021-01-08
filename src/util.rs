@@ -30,3 +30,31 @@ pub fn is_whitespace(s: &str) -> bool {
 pub fn string_length(word: &str) -> usize {
   word.graphemes(true).count()
 }
+
+pub fn fmt_token_pointer(token_value: &str, col: usize) -> (String, String) {
+  (
+    repeat_chars(" ", col - 1),
+    repeat_chars("^", string_length(token_value)),
+  )
+}
+
+pub fn fmt_list<'a, T: std::fmt::Display>(elems: &'a [T], sep: &str, linker: &str) -> String {
+  if let [rest @ .., last] = elems {
+    if rest.is_empty() {
+      format!("{}", last)
+    } else {
+      format!(
+        "{}, {} {}",
+        rest
+          .iter()
+          .map(|e| format!("{}", e))
+          .collect::<Vec<_>>()
+          .join(sep),
+        linker,
+        last
+      )
+    }
+  } else {
+    "".into()
+  }
+}
