@@ -3,7 +3,7 @@ use bstr::{ByteSlice, B};
 use std::fmt;
 use unicode_segmentation::UnicodeSegmentation;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TokenValue<'a> {
   Whitespace,
   Word(&'a str),
@@ -35,7 +35,7 @@ impl fmt::Display for TokenValue<'_> {
 
 pub use TokenValue::*;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Token<'a> {
   pub value: TokenValue<'a>,
   pub line: &'a str,
@@ -65,8 +65,7 @@ pub struct Error<'a>(Token<'a>);
 impl fmt::Display for Error<'_> {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     let token = &self.0;
-    let padding = util::repeat_chars(" ", token.column_number - 1);
-    let pointer = util::repeat_chars("^", util::string_length(token.value.get()));
+    let (padding, pointer) = util::fmt_token_pointer(token.value.get(), token.column_number);
     write!(
       f,
       "Error on line {}, column {}: {}\n  {}\n  {}{}",
@@ -120,7 +119,7 @@ pub fn lex(s: &str) -> Result<Vec<Token>, Error> {
         res
       })
     })
-    .collect::<Result<Vec<_>, _>>()
+    .collect()
 }
 
 #[cfg(test)]
