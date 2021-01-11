@@ -1,6 +1,7 @@
 use super::lexer;
 use super::operation::Operation;
 use crate::util;
+use std::borrow::Cow;
 use std::fmt;
 
 pub struct Error<'a> {
@@ -8,6 +9,7 @@ pub struct Error<'a> {
   operation_token: lexer::Token<'a>,
   unexpected_token: Option<lexer::Token<'a>>,
   expected_token: Option<&'static [lexer::TokenValue<'static>]>,
+  details: Option<Cow<'static, str>>,
 }
 
 impl<'a> Error<'a> {
@@ -16,12 +18,14 @@ impl<'a> Error<'a> {
     operation_token: lexer::Token<'a>,
     unexpected_token: Option<lexer::Token<'a>>,
     expected_token: Option<&'static [lexer::TokenValue<'static>]>,
+    details: Option<Cow<'static, str>>,
   ) -> Self {
     Error {
       operation,
       operation_token,
       unexpected_token,
       expected_token,
+      details,
     }
   }
 }
@@ -69,7 +73,7 @@ impl fmt::Display for Error<'_> {
     let (padding, pointer) = util::fmt_token_pointer(op_token.value.get(), op_token.column_number);
     write!(
       f,
-      "Error on operation \"{}\" on line {}, column {}:\n  {}\n  {}{}{}{}",
+      "Error on operation \"{}\" on line {}, column {}:\n  {}\n  {}{}{}{}{}",
       self.operation,
       op_token.line_number,
       op_token.column_number,
@@ -77,7 +81,14 @@ impl fmt::Display for Error<'_> {
       padding,
       pointer,
       fmt_unexpected(self),
-      fmt_expected(self)
+      fmt_expected(self),
+      if let Some(text) = self.details {
+        &["\n", &text].join("")
+      } else {
+        ""
+      }
     )
   }
 }
+
+// TODO: Create tests
