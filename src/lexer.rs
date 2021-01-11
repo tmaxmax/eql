@@ -29,6 +29,9 @@ impl TokenValue<'_> {
 impl fmt::Display for TokenValue<'_> {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     let (t, v) = self.get_type_and_value();
+    if v.is_empty() {
+      write!(f, "any {} token", t)
+    }
     write!(f, "{} token \"{}\"", t, v)
   }
 }
@@ -211,4 +214,6 @@ mod test {
     let got = format!("{}", lex(source).expect_err("Lex must fail"));
     assert_eq!(got, expect);
   }
+
+  // TODO: Update tests for empty value token
 }
