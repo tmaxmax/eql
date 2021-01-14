@@ -1,5 +1,4 @@
 use crate::util;
-use std::borrow::Cow;
 use std::fmt;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -164,23 +163,23 @@ fn fmt_modifier(op: &Operation) -> &'static str {
   }
 }
 
-pub fn fmt_names<'a>(elems: &'a [String], linker: &str) -> Cow<'a, str> {
+pub fn fmt_names(elems: &[String], linker: &str) -> String {
   let names = util::fmt_list(elems, ", ", "and");
   if names.is_empty() {
-    "".into()
+    names
   } else {
-    format!(" {} {}", names, linker).into()
+    format!(" {} {}", names, linker)
   }
 }
 
 impl fmt::Display for Operation {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    let statement: Cow<str> = match self.kind {
+    let statement = match self.kind {
       Unknown => return f.write_str("Unknown"),
-      Create => "Create".into(),
-      Show => "Show".into(),
-      Add => format!("Add{}", fmt_names(self.names(), "to")).into(),
-      Remove => format!("Remove{}", fmt_names(self.names(), "from")).into(),
+      Create => String::from("Create"),
+      Show => String::from("Show"),
+      Add => format!("Add{}", fmt_names(self.names(), "to")),
+      Remove => format!("Remove{}", fmt_names(self.names(), "from")),
     };
     write!(
       f,
