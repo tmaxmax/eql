@@ -82,10 +82,10 @@ impl fmt::Display for Error<'_> {
       pointer,
       fmt_unexpected(self),
       fmt_expected(self),
-      if let Some(text) = self.details {
-        &["\n", &text].join("")
+      if let Some(text) = &self.details {
+        ["\n", text].join("")
       } else {
-        ""
+        "".into()
       }
     )
   }
