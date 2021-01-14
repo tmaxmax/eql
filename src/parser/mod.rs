@@ -109,10 +109,14 @@ fn parse_add<'a>(
       LINKER_TO => {
         break;
       }
-      _ if RESERVED.contains(&token.value) => {
+      _ => {
         return Err(make_error(
           token,
-          Some(format!("{} is reserved", token.value).into()),
+          if RESERVED.contains(&token.value) {
+            Some(format!("{} is reserved", token.value).into())
+          } else {
+            None
+          },
         ))
       }
     }
