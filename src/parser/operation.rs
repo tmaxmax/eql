@@ -10,6 +10,18 @@ pub enum OperationKind {
   Show,
 }
 
+impl fmt::Display for OperationKind {
+  fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+    fmt.write_str(match *self {
+      Unknown => "Unknown",
+      Create => "Create",
+      Remove => "Remove",
+      Add => "Add",
+      Show => "Show",
+    })
+  }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Operation {
   kind: OperationKind,
@@ -23,7 +35,7 @@ use self::OperationKind::*;
 
 impl Operation {
   pub fn unknown() -> Self {
-    Operation {
+    Self {
       kind: Unknown,
       department: None,
       fail_silently: None,
@@ -33,7 +45,7 @@ impl Operation {
   }
 
   pub fn create(department: String, fail_silently: bool, overwrite: bool) -> Self {
-    Operation {
+    Self {
       kind: Create,
       department: Some(department),
       fail_silently: Some(fail_silently),
@@ -43,7 +55,7 @@ impl Operation {
   }
 
   pub fn remove(department: String, fail_silently: bool, names: Vec<String>) -> Self {
-    Operation {
+    Self {
       kind: Remove,
       department: Some(department),
       fail_silently: Some(fail_silently),
@@ -53,7 +65,7 @@ impl Operation {
   }
 
   pub fn add(department: String, fail_silently: bool, names: Vec<String>, overwrite: bool) -> Self {
-    Operation {
+    Self {
       kind: Add,
       department: Some(department),
       fail_silently: Some(fail_silently),
@@ -64,7 +76,7 @@ impl Operation {
   }
 
   pub fn show(department: String, fail_silently: bool) -> Self {
-    Operation {
+    Self {
       kind: Show,
       department: Some(department),
       fail_silently: Some(fail_silently),
@@ -109,47 +121,31 @@ impl Operation {
   }
 
   pub fn set_department(self, department: String) -> Option<Self> {
-    if let Some(_) = self.department {
-      Some(Self {
-        department: Some(department),
-        ..self
-      })
-    } else {
-      None
-    }
+    self.department.and(Some(Self {
+      department: Some(department),
+      ..self
+    }))
   }
 
   pub fn set_fail_silently(self, fail_silently: bool) -> Option<Self> {
-    if let Some(_) = self.fail_silently {
-      Some(Self {
-        fail_silently: Some(fail_silently),
-        ..self
-      })
-    } else {
-      None
-    }
+    self.fail_silently.and(Some(Self {
+      fail_silently: Some(fail_silently),
+      ..self
+    }))
   }
 
   pub fn set_names(self, names: Vec<String>) -> Option<Self> {
-    if let Some(_) = self.names {
-      Some(Self {
-        names: Some(names),
-        ..self
-      })
-    } else {
-      None
-    }
+    self.names.and(Some(Self {
+      names: Some(names),
+      ..self
+    }))
   }
 
   pub fn set_overwrite(self, overwrite: bool) -> Option<Self> {
-    if let Some(_) = self.overwrite {
-      Some(Self {
-        overwrite: Some(overwrite),
-        ..self
-      })
-    } else {
-      None
-    }
+    self.overwrite.and(Some(Self {
+      overwrite: Some(overwrite),
+      ..self
+    }))
   }
 }
 
@@ -174,12 +170,21 @@ pub fn fmt_names(elems: &[String], linker: &str) -> String {
 
 impl fmt::Display for Operation {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    let statement = match self.kind {
-      Unknown => return f.write_str("Unknown"),
-      Create => String::from("Create"),
-      Show => String::from("Show"),
-      Add => format!("Add{}", fmt_names(self.names(), "to")),
-      Remove => format!("Remove{}", fmt_names(self.names(), "from")),
+    let statement = match self.kind() {
+      Unknown => return self.kind().fmt(f),
+      Create | Show => self.kind().to_string(),
+      _ => format!(
+        "{}{}",
+        self.kind(),
+        fmt_names(
+          self.names(),
+          match self.kind() {
+            Add => "to",
+            Remove => "from",
+            _ => "",
+          }
+        )
+      ),
     };
     write!(
       f,
