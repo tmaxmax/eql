@@ -31,8 +31,9 @@ impl fmt::Display for TokenValue<'_> {
     let (t, v) = self.get_type_and_value();
     if v.is_empty() {
       write!(f, "any {} token", t)
+    } else {
+      write!(f, "{} token \"{}\"", t, v)
     }
-    write!(f, "{} token \"{}\"", t, v)
   }
 }
 
