@@ -25,7 +25,7 @@ impl fmt::Display for OperationKind {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Operation {
   kind: OperationKind,
-  department: Option<String>,
+  departments: Option<Vec<String>>,
   fail_silently: Option<bool>,
   names: Option<Vec<String>>,
   overwrite: Option<bool>,
@@ -37,37 +37,42 @@ impl Operation {
   pub fn unknown() -> Self {
     Self {
       kind: Unknown,
-      department: None,
+      departments: None,
       fail_silently: None,
       names: None,
       overwrite: None,
     }
   }
 
-  pub fn create(department: String, fail_silently: bool, overwrite: bool) -> Self {
+  pub fn create(departments: Vec<String>, fail_silently: bool, overwrite: bool) -> Self {
     Self {
       kind: Create,
-      department: Some(department),
+      departments: Some(departments),
       fail_silently: Some(fail_silently),
       overwrite: Some(overwrite),
       ..Self::unknown()
     }
   }
 
-  pub fn remove(department: String, fail_silently: bool, names: Vec<String>) -> Self {
+  pub fn remove(departments: Vec<String>, fail_silently: bool, names: Vec<String>) -> Self {
     Self {
       kind: Remove,
-      department: Some(department),
+      departments: Some(departments),
       fail_silently: Some(fail_silently),
       names: Some(names),
       ..Self::unknown()
     }
   }
 
-  pub fn add(department: String, fail_silently: bool, names: Vec<String>, overwrite: bool) -> Self {
+  pub fn add(
+    departments: Vec<String>,
+    fail_silently: bool,
+    names: Vec<String>,
+    overwrite: bool,
+  ) -> Self {
     Self {
       kind: Add,
-      department: Some(department),
+      departments: Some(departments),
       fail_silently: Some(fail_silently),
       names: Some(names),
       overwrite: Some(overwrite),
@@ -75,10 +80,10 @@ impl Operation {
     }
   }
 
-  pub fn show(department: String, fail_silently: bool) -> Self {
+  pub fn show(departments: Vec<String>, fail_silently: bool) -> Self {
     Self {
       kind: Show,
-      department: Some(department),
+      departments: Some(departments),
       fail_silently: Some(fail_silently),
       ..Self::unknown()
     }
@@ -88,12 +93,12 @@ impl Operation {
     self.kind
   }
 
-  pub fn get_department(&self) -> Option<&str> {
-    self.department.as_deref()
+  pub fn get_departments(&self) -> Option<&[String]> {
+    self.departments.as_deref()
   }
 
-  pub fn department(&self) -> &str {
-    self.get_department().unwrap()
+  pub fn departments(&self) -> &[String] {
+    self.get_departments().unwrap()
   }
 
   pub fn get_fail_silently(&self) -> Option<bool> {
@@ -120,9 +125,9 @@ impl Operation {
     self.get_overwrite().unwrap()
   }
 
-  pub fn set_department(self, department: String) -> Option<Self> {
-    self.department.and(Some(Self {
-      department: Some(department),
+  pub fn set_departments(self, departments: Vec<String>) -> Option<Self> {
+    self.departments.and(Some(Self {
+      departments: Some(departments),
       ..self
     }))
   }
@@ -190,7 +195,7 @@ impl fmt::Display for Operation {
       f,
       "{} {}{}",
       statement,
-      self.department(),
+      util::fmt_list(self.departments(), ", ", "and"),
       fmt_modifier(self)
     )
   }
@@ -206,22 +211,29 @@ mod test {
       (Operation::unknown(), "Unknown"),
       (
         Operation::add(
-          "Science".into(),
+          util::to_string_vec(vec!["Science", "Engineering"]),
           false,
           vec!["Mama".into(), "Tata".into(), "Bunica Miha".into()],
           false,
         ),
-        "Add Mama, Tata, and Bunica Miha to Science",
+        "Add Mama, Tata, and Bunica Miha to Science and Engineering",
       ),
       (
-        Operation::remove("Engineering".into(), true, vec!["Sally".into()]),
+        Operation::remove(
+          util::to_string_vec(vec!["Engineering"]),
+          true,
+          vec!["Sally".into()],
+        ),
         "Remove Sally from Engineering (fail silently)",
       ),
       (
-        Operation::create("Sales".into(), false, true),
+        Operation::create(util::to_string_vec(vec!["Sales"]), false, true),
         "Create Sales (overwrite if existing)",
       ),
-      (Operation::show("HR".into(), false), "Show HR"),
+      (
+        Operation::show(util::to_string_vec(vec!["HR"]), false),
+        "Show HR",
+      ),
     ];
 
     ops
