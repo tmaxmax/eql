@@ -44,12 +44,13 @@ pub fn fmt_list<'a, T: std::fmt::Display>(elems: &'a [T], sep: &str, linker: &st
       format!("{}", last)
     } else {
       format!(
-        "{}, {} {}",
+        "{}{} {} {}",
         rest
           .iter()
           .map(|e| format!("{}", e))
           .collect::<Vec<_>>()
           .join(sep),
+        if rest.len() == 1 { "" } else { "," },
         linker,
         last
       )
@@ -57,4 +58,8 @@ pub fn fmt_list<'a, T: std::fmt::Display>(elems: &'a [T], sep: &str, linker: &st
   } else {
     "".into()
   }
+}
+
+pub fn to_string_vec(v: Vec<&str>) -> Vec<String> {
+  v.into_iter().map(String::from).collect()
 }
