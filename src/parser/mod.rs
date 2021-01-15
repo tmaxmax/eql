@@ -4,6 +4,7 @@ pub use self::error::*;
 pub use self::operation::*;
 
 use super::lexer;
+use crate::util;
 use std::borrow::Cow;
 
 const KEYWORD_ADD: lexer::TokenValue = lexer::TokenValue::Word("Add");
@@ -32,65 +33,105 @@ const SEPARATOR_VALUES: lexer::TokenValue = lexer::TokenValue::Punctuation(",");
 const TERMINATORS: &[lexer::TokenValue] =
   &[SEPARATOR, SEPARATOR_OVERWRITE, SEPARATOR_FAIL_SILENTLY];
 
-fn is_operation_separator(t: lexer::TokenValue) -> bool {
-  matches!(t, SEPARATOR | SEPARATOR_OVERWRITE | SEPARATOR_FAIL_SILENTLY)
-}
-
-// TODO: Implement handle_separator
-fn handle_separator<'a>(
-  it: &mut (impl Iterator<Item = lexer::Token<'a>> + Clone),
+fn handle_terminator<'a, 'b>(
+  tokens: &'b [lexer::Token<'a>],
   op: Operation,
   op_token: lexer::Token<'a>,
 ) -> Result<Operation, Error<'a>> {
-  let separator = it.skip_while(|t| is_operation_separator(t.value)).next();
-  if let Some(sep) = separator {
-    unimplemented!()
-  } else {
-    Err(Error::new(
+  match tokens.len() {
+    0 => Err(Error::new(
       op.kind(),
       op_token,
       None,
       Some(TERMINATORS),
-      None,
-    ))
+      Some("You didn't terminate your operation!".into()),
+    )),
+    1 => {
+      let value = tokens[0].value;
+      let op_kind = op.kind();
+      match value {
+        SEPARATOR_OVERWRITE => op.set_overwrite(true),
+        SEPARATOR_FAIL_SILENTLY => op.set_fail_silently(true),
+        _ => Some(op),
+      }
+      .ok_or_else(|| {
+        Error::new(
+          op_kind,
+          op_token,
+          Some(tokens[0]),
+          Some(match op_kind {
+            OperationKind::Unknown => {
+              panic!("Unknown operations should not be passed to handle_terminator")
+            }
+            OperationKind::Create | OperationKind::Add => {
+              &[SEPARATOR_OVERWRITE, SEPARATOR_FAIL_SILENTLY]
+            }
+            OperationKind::Show | OperationKind::Remove => &[SEPARATOR_FAIL_SILENTLY],
+          }),
+          Some(format!("{} is not a valid terminator for the operation", value).into()),
+        )
+      })
+    }
+    _ => panic!(
+      "Invalid input for handle_terminator, expected 1 or no tokens, got {}: {:#?}",
+      tokens.len(),
+      tokens
+    ),
   }
 }
 
-fn get_name_tokens<'a, 'b>(
+fn get_list_element_tokens<'a, 'b>(
   tokens: &'b [lexer::Token<'a>],
-) -> Result<(&'b [lexer::Token<'a>], bool), usize> {
+) -> Result<(&'b [lexer::Token<'a>], usize, bool), usize> {
+  let mut last_word_index = 0;
+  let mut first_word_index = None;
+
   for i in 0..tokens.len() {
     let token = tokens[i];
     match token.value {
-      SEPARATOR_VALUES | LINKER_AND => return Ok((&tokens[..i], false)),
-      LINKER_TO | LINKER_FROM => return Ok((&tokens[..i], true)),
-      lexer::Whitespace | lexer::Word(_) => {}
+      SEPARATOR_VALUES | LINKER_AND => {
+        return Ok((
+          &tokens[first_word_index.unwrap_or_default()..=last_word_index],
+          i,
+          false,
+        ))
+      }
+      LINKER_TO | LINKER_FROM => {
+        return Ok((
+          &tokens[first_word_index.unwrap_or_default()..=last_word_index],
+          i,
+          true,
+        ))
+      }
+      lexer::Whitespace => {}
+      lexer::Word(_) => {
+        if let Some(_) = first_word_index {
+          last_word_index = i;
+        } else {
+          first_word_index = Some(i);
+        }
+      }
       _ => return Err(i),
     }
   }
-  Ok((tokens, false))
+  Ok((
+    &tokens[first_word_index.unwrap_or_default()..=last_word_index],
+    tokens.len(),
+    false,
+  ))
 }
 
-fn get_department_tokens<'a, 'b>(
-  tokens: &'b [lexer::Token<'a>],
-) -> Result<&'b [lexer::Token<'a>], usize> {
-  for i in 0..tokens.len() {
-    let token = tokens[i];
-    match token.value {
-      lexer::Whitespace | lexer::Word(_) => {}
-      _ if TERMINATORS.contains(&token.value) => return Ok(&tokens[..i]),
-      _ => return Err(i),
-    }
-  }
-  Ok(tokens)
+fn get_string_from_tokens<'a, 'b>(tokens: &'b [lexer::Token<'a>]) -> String {
+  let mut v = tokens.to_vec();
+  v.dedup();
+  v.into_iter().map(|t| t.value.get().to_string()).collect()
 }
 
-fn parse_add<'a, 'b>(
-  op_token: lexer::Token<'a>,
+fn parse_list<'a, 'b>(
   tokens: &'b [lexer::Token<'a>],
-) -> Result<Operation, Error<'a>> {
-  let mut names = Vec::new();
-  // let department_tokens;
+  terminators: &[lexer::TokenValue],
+) -> Result<(Vec<String>, usize), Option<lexer::Token<'a>>> {
+  let mut elements = Vec::new();
 
   let mut i = 0;
   while i < tokens.len() {
@@ -98,43 +139,76 @@ fn parse_add<'a, 'b>(
 
     match token.value {
       lexer::Whitespace => {}
-      LINKER_TO => {
-        // TODO: Implement linker handler
-        unimplemented!();
-      }
-      lexer::Word(_) => match get_name_tokens(&tokens[i..]) {
-        Ok((name_tokens, is_linker)) => {
-          i += name_tokens.len();
-          names.push(name_tokens);
-          if is_linker {
+      _ if terminators.contains(&token.value) => break,
+      lexer::Word(_) => match get_list_element_tokens(&tokens[i..]) {
+        Ok((elem_tokens, incr, is_terminator)) => {
+          i += incr;
+          elements.push(elem_tokens);
+          if is_terminator {
             continue;
           }
         }
-        Err(increment) => {
-          i += increment;
+        Err(incr) => {
+          i += incr;
           continue;
         }
       },
-      _ => {
-        let details: Option<Cow<str>> = match () {
-          _ if RESERVED.contains(&token.value) => {
-            Some(format!("Can't use {} in names, it's reserved!", token.value).into())
-          }
-          _ => None,
-        };
-        return Err(Error::new(
-          OperationKind::Add,
-          op_token,
-          Some(token),
-          Some(&[lexer::Whitespace, lexer::Word(""), LINKER_TO]),
-          details,
-        ));
-      }
+      _ => return Err(Some(token)),
     }
     i += 1;
   }
-  // TODO: implement rest of parse_add
-  Ok(Operation::unknown())
+  let ret: Vec<String> = elements.into_iter().map(get_string_from_tokens).collect();
+  if ret.is_empty() {
+    Err(None)
+  } else {
+    Ok((ret, i))
+  }
+}
+
+fn parse_add<'a, 'b>(
+  op_token: lexer::Token<'a>,
+  tokens: &'b [lexer::Token<'a>],
+) -> Result<Operation, Error<'a>> {
+  let mut i = 0;
+  let mut lists = Vec::new();
+  for terminator in &[&[LINKER_TO], TERMINATORS] {
+    let (list, incr) = parse_list(&tokens[i..], terminator).or_else(|t| {
+      const EXPECTED: &[lexer::TokenValue] = &[lexer::Whitespace, lexer::Word("")];
+      Err(t.map_or_else(
+        || {
+          Error::new(
+            OperationKind::Add,
+            op_token,
+            None,
+            Some(EXPECTED),
+            Some("List is empty!".into()),
+          )
+        },
+        |t| {
+          Error::new(
+            OperationKind::Add,
+            op_token,
+            Some(t),
+            Some(EXPECTED),
+            match () {
+              _ if RESERVED.contains(&t.value) => {
+                Some(format!("Can't use {} in lists, it's reserved!", t.value).into())
+              }
+              _ => None,
+            },
+          )
+        },
+      ))
+    })?;
+    lists.push(list);
+    i += incr + 1;
+  }
+  let (names, departments) = (lists.swap_remove(0), lists.swap_remove(0));
+  handle_terminator(
+    &tokens[i - 1..],
+    Operation::add(departments, false, names, false),
+    op_token,
+  )
 }
 
 fn get_statement_slice<'a, 'b>(tokens: &'b [lexer::Token<'a>]) -> &'b [lexer::Token<'a>] {
@@ -175,4 +249,20 @@ pub fn parse(tokens: Vec<lexer::Token>) -> Result<Vec<Operation>, Error> {
   Ok(res)
 }
 
-// TODO: Rest of operations + tests
+#[cfg(test)]
+mod tests {
+  use super::*;
+  fn tv<'a>(tokens: Vec<lexer::Token<'a>>) -> Vec<lexer::TokenValue<'a>> {
+    tokens.into_iter().map(|t| t.value).collect()
+  }
+
+  // TODO: fix list parser
+  #[test]
+  fn test_get_list_element_tokens() {
+    let tokens = lexer::lex("Moraru    Mihaela  , Mircea Ioan and Amalia Brad").unwrap();
+    let (got, ..) = get_list_element_tokens(&tokens).unwrap();
+    let expect = lexer::lex("Moraru Mihaela").unwrap();
+    assert_eq!(tv(got.into()), tv(expect));
+  }
+  // TODO: more tests
+}
