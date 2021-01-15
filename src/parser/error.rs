@@ -4,6 +4,7 @@ use crate::util;
 use std::borrow::Cow;
 use std::fmt;
 
+#[derive(Debug)]
 pub struct Error<'a> {
   operation_kind: OperationKind,
   operation_token: lexer::Token<'a>,
