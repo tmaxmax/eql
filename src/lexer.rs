@@ -14,7 +14,7 @@ pub enum TokenValue<'a> {
 impl TokenValue<'_> {
   fn get_type_and_value(&self) -> (&str, &str) {
     match *self {
-      Whitespace => ("whitespace", ""),
+      Whitespace => ("whitespace", " "),
       Word(s) => ("word", s),
       Punctuation(s) => ("punctuation", s),
       Unknown(s) => ("unknown", s),
@@ -29,7 +29,7 @@ impl TokenValue<'_> {
 impl fmt::Display for TokenValue<'_> {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     let (t, v) = self.get_type_and_value();
-    if v.is_empty() {
+    if v.is_empty() || matches!(*self, Whitespace) {
       write!(f, "any {} token", t)
     } else {
       write!(f, "{} token \"{}\"", t, v)
@@ -191,15 +191,7 @@ mod test {
       "+",        // Sm Math Symbol
       "\u{00A6}", // So Other Symbol
     ];
-    let accepted_count = chars
-      .iter()
-      .enumerate()
-      .filter_map::<(), _>(|(i, c)| match lex(c) {
-        Ok(res) => panic!("({}, {:?})", i, res),
-        Err(_) => None,
-      })
-      .count();
-    assert_eq!(accepted_count, 0);
+    chars.into_iter().map(lex).for_each(|r| { r.unwrap_err(); });
   }
 
   #[test]
