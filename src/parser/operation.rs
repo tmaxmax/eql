@@ -76,7 +76,6 @@ impl Operation {
       fail_silently: Some(fail_silently),
       names: Some(names),
       overwrite: Some(overwrite),
-      ..Self::unknown()
     }
   }
 
