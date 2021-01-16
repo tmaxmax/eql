@@ -14,7 +14,7 @@ pub enum TokenValue<'a> {
 impl TokenValue<'_> {
   fn get_type_and_value(&self) -> (&str, &str) {
     match *self {
-      Whitespace => ("whitespace", " "),
+      Whitespace => ("whitespace", ""),
       Word(s) => ("word", s),
       Punctuation(s) => ("punctuation", s),
       Unknown(s) => ("unknown", s),
@@ -80,11 +80,7 @@ impl fmt::Display for Error<'_> {
 
 fn is_punctuation(s: &str) -> bool {
   let b = s.as_bytes();
-  b.len() == 1
-    && match b[0] {
-      b',' | b'.' | b'!' | b'?' => true,
-      _ => false,
-    }
+  b.len() == 1 && matches!(b[0], b',' | b'.' | b'!' | b'?')
 }
 
 fn get_token<'a>(
