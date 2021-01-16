@@ -45,11 +45,7 @@ pub fn fmt_list<'a, T: std::fmt::Display>(elems: &'a [T], sep: &str, linker: &st
     } else {
       format!(
         "{}{} {} {}",
-        rest
-          .iter()
-          .map(|e| format!("{}", e))
-          .collect::<Vec<_>>()
-          .join(sep),
+        rest.iter().map(T::to_string).collect::<Vec<_>>().join(sep),
         if rest.len() == 1 { "" } else { "," },
         linker,
         last
