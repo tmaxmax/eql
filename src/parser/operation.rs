@@ -163,7 +163,7 @@ fn fmt_modifier(op: &Operation) -> &'static str {
   }
 }
 
-pub fn fmt_names(elems: &[String], linker: &str) -> String {
+fn fmt_names(elems: &[String], linker: &str) -> String {
   let names = util::fmt_list(elems, ", ", "and");
   if names.is_empty() {
     names
