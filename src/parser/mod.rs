@@ -1,21 +1,20 @@
 mod constants;
 mod error;
-mod operation;
 mod util;
 
-pub use self::error::*;
-pub use self::operation::*;
-
 use self::constants::*;
+pub use self::error::*;
 use self::util::*;
 use super::lexer;
+use crate::operation::{self, Operation};
 use std::cmp::min;
+use std::hint;
 
 fn parse_add<'a, 'b>(
   op_token: lexer::Token<'a>,
   tokens: &'b [lexer::Token<'a>],
 ) -> Result<Operation, Error<'a>> {
-  let error_handler = get_parse_list_error_handler_generator(OperationKind::Add, op_token);
+  let error_handler = get_parse_list_error_handler_generator(operation::Add, op_token);
   let (names, i) = parse_list(tokens, &[LINKER_TO]).map_err(error_handler(&[LINKER_TO], "name"))?;
   let (departments, j) = parse_list(&tokens[i + 1..], &TERMINATORS)
     .map_err(error_handler(&TERMINATORS, "department"))?;
@@ -30,7 +29,7 @@ fn parse_create<'a, 'b>(
   op_token: lexer::Token<'a>,
   tokens: &'b [lexer::Token<'a>],
 ) -> Result<Operation, Error<'a>> {
-  let error_handler = get_parse_list_error_handler_generator(OperationKind::Create, op_token);
+  let error_handler = get_parse_list_error_handler_generator(operation::Create, op_token);
   let (departments, i) =
     parse_list(tokens, &TERMINATORS).map_err(error_handler(&TERMINATORS, "department"))?;
   handle_terminator(
@@ -44,7 +43,7 @@ fn parse_show<'a, 'b>(
   op_token: lexer::Token<'a>,
   tokens: &'b [lexer::Token<'a>],
 ) -> Result<Operation, Error<'a>> {
-  let error_handler = get_parse_list_error_handler_generator(OperationKind::Show, op_token);
+  let error_handler = get_parse_list_error_handler_generator(operation::Show, op_token);
   let (departments, i) =
     parse_list(tokens, &TERMINATORS).map_err(error_handler(&TERMINATORS, "department"))?;
   handle_terminator(
@@ -58,7 +57,7 @@ fn parse_remove<'a, 'b>(
   op_token: lexer::Token<'a>,
   tokens: &'b [lexer::Token<'a>],
 ) -> Result<Operation, Error<'a>> {
-  let error_handler = get_parse_list_error_handler_generator(OperationKind::Remove, op_token);
+  let error_handler = get_parse_list_error_handler_generator(operation::Remove, op_token);
   const LIST_TERMINATORS: [lexer::TokenValue; 4] = [
     LINKER_FROM,
     SEPARATOR,
@@ -98,12 +97,12 @@ pub fn parse(tokens: Vec<lexer::Token>) -> Result<Vec<Operation>, Error> {
           KEYWORD_CREATE => parse_create,
           KEYWORD_SHOW => parse_show,
           KEYWORD_REMOVE => parse_remove,
-          _ => unreachable!(),
+          _ => unsafe { hint::unreachable_unchecked() },
         }(token, op_tokens)?);
       }
       _ => {
         return Err(Error::new(
-          OperationKind::Unknown,
+          operation::Unknown,
           token,
           Some(token),
           Some({
@@ -133,6 +132,7 @@ mod tests {
       "Add Mihai, Andrei and Ioan to .",
       "Add Mihai, Andrei and Ioan.",
       "Add to?",
+      "Add Mihai",
       "Add!",
     ];
     type FnExpect = fn(Result<Operation, Error>) -> bool;
@@ -146,6 +146,7 @@ mod tests {
             true,
           ))
       },
+      |res| res.is_err(),
       |res| res.is_err(),
       |res| res.is_err(),
       |res| res.is_err(),
