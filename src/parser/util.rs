@@ -100,10 +100,12 @@ fn get_string_from_tokens(tokens: &[lexer::Token]) -> String {
   v.into_iter().map(|t| t.value.get().to_string()).collect()
 }
 
+type ParseListError<'a> = (Option<lexer::Token<'a>>, bool);
+
 pub fn parse_list<'a, 'b>(
   tokens: &'b [lexer::Token<'a>],
   terminators: &[lexer::TokenValue],
-) -> Result<(Vec<String>, usize), (Option<lexer::Token<'a>>, bool)> {
+) -> Result<(Vec<String>, usize), ParseListError<'a>> {
   let mut elements = Vec::new();
 
   let mut i = 0;
@@ -132,83 +134,55 @@ pub fn parse_list<'a, 'b>(
   }
   let ret: Vec<String> = elements.into_iter().map(get_string_from_tokens).collect();
   if ret.is_empty() {
-    Err((tokens.get(min(i, tokens.len().checked_sub(1).unwrap_or_default())).cloned(), true))
+    Err((
+      tokens
+        .get(min(i, tokens.len().checked_sub(1).unwrap_or_default()))
+        .cloned(),
+      true,
+    ))
   } else {
     Ok((ret, i))
   }
 }
 
-pub struct ListErrorHandler<'a> {
+pub fn get_parse_list_error_handler_generator<'a>(
   op_kind: OperationKind,
   op_token: lexer::Token<'a>,
-}
-
-pub struct ListErrorHandle<'a> {
-  op_kind: OperationKind,
-  op_token: lexer::Token<'a>,
-  terminators: &'static [lexer::TokenValue<'static>],
-  name: &'static str,
-}
-
-impl<'a> ListErrorHandle<'a> {
-  fn new(
-    op_kind: OperationKind,
-    op_token: lexer::Token<'a>,
-    terminators: &'static [lexer::TokenValue<'static>],
-    name: &'static str,
-  ) -> Self {
-    Self {
-      op_kind,
-      op_token,
-      terminators,
-      name,
-    }
-  }
-
-  pub fn handle(&self, res: (Option<lexer::Token<'a>>, bool)) -> Error<'a> {
-    const EXPECTED: &[lexer::TokenValue] = &[lexer::Whitespace, lexer::Word("")];
-    let (t, is_empty) = res;
-    if is_empty {
-      Error::new(
-        self.op_kind,
-        self.op_token,
-        t,
-        Some(EXPECTED.into()),
-        Some(
-          format!(
-            "You must specify at least one {} before list terminator{}",
-            self.name,
-            t.map(|v| format!(" {}", v.value.to_string()))
-              .unwrap_or_default(),
-          )
-          .into(),
-        ),
-      )
-    } else {
-      Error::new(
-        self.op_kind,
-        self.op_token,
-        t,
-        Some([EXPECTED, self.terminators].concat().into()),
-        t.map(|v| v.value)
-          .filter(|v| RESERVED.contains(&v))
-          .map(|v| format!("Can't use {} in lists, it's reserved!", v).into()),
-      )
-    }
-  }
-}
-
-impl<'a> ListErrorHandler<'a> {
-  pub fn new(op_kind: OperationKind, op_token: lexer::Token<'a>) -> Self {
-    Self { op_kind, op_token }
-  }
-
-  pub fn get_handler(
-    &self,
-    terminators: &'static [lexer::TokenValue<'static>],
-    name: &'static str,
-  ) -> ListErrorHandle<'a> {
-    ListErrorHandle::new(self.op_kind, self.op_token, terminators, name)
+) -> impl Fn(
+  &'static [lexer::TokenValue<'static>],
+  &'static str,
+) -> Box<dyn Fn(ParseListError<'a>) -> Error<'a> + 'a> {
+  move |terminators, name| {
+    Box::new(move |(t, is_empty)| {
+      const EXPECTED: &[lexer::TokenValue] = &[lexer::Whitespace, lexer::Word("")];
+      if is_empty {
+        Error::new(
+          op_kind,
+          op_token,
+          t,
+          Some(EXPECTED.into()),
+          Some(
+            format!(
+              "You must specify at least one {} before list terminator{}",
+              name,
+              t.map(|v| format!(" {}", v.value.to_string()))
+                .unwrap_or_default(),
+            )
+            .into(),
+          ),
+        )
+      } else {
+        Error::new(
+          op_kind,
+          op_token,
+          t,
+          Some([EXPECTED, terminators].concat().into()),
+          t.map(|v| v.value)
+            .filter(|v| RESERVED.contains(&v))
+            .map(|v| format!("Can't use {} in lists, it's reserved!", v).into()),
+        )
+      }
+    })
   }
 }
 

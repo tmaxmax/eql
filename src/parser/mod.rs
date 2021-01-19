@@ -15,14 +15,10 @@ fn parse_add<'a, 'b>(
   op_token: lexer::Token<'a>,
   tokens: &'b [lexer::Token<'a>],
 ) -> Result<Operation, Error<'a>> {
-  let error_handler = ListErrorHandler::new(OperationKind::Add, op_token);
-  let (names, i) = parse_list(tokens, &[LINKER_TO])
-    .map_err(|v| error_handler.get_handler(&[LINKER_TO], "name").handle(v))?;
-  let (departments, j) = parse_list(&tokens[i + 1..], &TERMINATORS).map_err(|v| {
-    error_handler
-      .get_handler(&TERMINATORS, "department")
-      .handle(v)
-  })?;
+  let error_handler = get_parse_list_error_handler_generator(OperationKind::Add, op_token);
+  let (names, i) = parse_list(tokens, &[LINKER_TO]).map_err(error_handler(&[LINKER_TO], "name"))?;
+  let (departments, j) = parse_list(&tokens[i + 1..], &TERMINATORS)
+    .map_err(error_handler(&TERMINATORS, "department"))?;
   handle_terminator(
     &tokens[min(i + j + 1, tokens.len())..],
     Operation::add(departments, false, names, false),
@@ -34,12 +30,9 @@ fn parse_create<'a, 'b>(
   op_token: lexer::Token<'a>,
   tokens: &'b [lexer::Token<'a>],
 ) -> Result<Operation, Error<'a>> {
-  let error_handler = ListErrorHandler::new(OperationKind::Create, op_token);
-  let (departments, i) = parse_list(tokens, &TERMINATORS).map_err(|v| {
-    error_handler
-      .get_handler(&TERMINATORS, "department")
-      .handle(v)
-  })?;
+  let error_handler = get_parse_list_error_handler_generator(OperationKind::Create, op_token);
+  let (departments, i) =
+    parse_list(tokens, &TERMINATORS).map_err(error_handler(&TERMINATORS, "department"))?;
   handle_terminator(
     &tokens[min(i, tokens.len())..],
     Operation::create(departments, false, false),
@@ -51,12 +44,9 @@ fn parse_show<'a, 'b>(
   op_token: lexer::Token<'a>,
   tokens: &'b [lexer::Token<'a>],
 ) -> Result<Operation, Error<'a>> {
-  let error_handler = ListErrorHandler::new(OperationKind::Show, op_token);
-  let (departments, i) = parse_list(tokens, &TERMINATORS).map_err(|v| {
-    error_handler
-      .get_handler(&TERMINATORS, "department")
-      .handle(v)
-  })?;
+  let error_handler = get_parse_list_error_handler_generator(OperationKind::Show, op_token);
+  let (departments, i) =
+    parse_list(tokens, &TERMINATORS).map_err(error_handler(&TERMINATORS, "department"))?;
   handle_terminator(
     &tokens[min(i, tokens.len())..],
     Operation::show(departments, false),
@@ -68,24 +58,17 @@ fn parse_remove<'a, 'b>(
   op_token: lexer::Token<'a>,
   tokens: &'b [lexer::Token<'a>],
 ) -> Result<Operation, Error<'a>> {
-  let error_handler = ListErrorHandler::new(OperationKind::Remove, op_token);
+  let error_handler = get_parse_list_error_handler_generator(OperationKind::Remove, op_token);
   const LIST_TERMINATORS: [lexer::TokenValue; 4] = [
     LINKER_FROM,
     SEPARATOR,
     SEPARATOR_OVERWRITE,
     SEPARATOR_FAIL_SILENTLY,
   ];
-  let (first_list, i) = parse_list(tokens, &LIST_TERMINATORS).map_err(|v| {
-    error_handler
-      .get_handler(&TERMINATORS, "name or department")
-      .handle(v)
-  })?;
+  let (first_list, i) = parse_list(tokens, &LIST_TERMINATORS)
+    .map_err(error_handler(&TERMINATORS, "name or department"))?;
   let (second_list, j) = parse_list(&tokens[i + 1..], &TERMINATORS)
-    .map_err(|v| {
-      error_handler
-        .get_handler(&TERMINATORS, "department")
-        .handle(v)
-    })
+    .map_err(error_handler(&TERMINATORS, "department"))
     .unwrap_or_default();
   let (names, departments, j) = if second_list.is_empty() {
     (first_list, second_list, j)
