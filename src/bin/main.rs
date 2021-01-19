@@ -16,6 +16,7 @@ fn main() -> io::Result<()> {
         let read = handle.read_line(&mut buf)?;
         total_read += read;
         if let Some(tail) = last_token_value(&buf[total_read - read..total_read].trim_end()) {
+          // FIXME: Break on actual terminators
           if !matches!(tail, eql::lexer::Word(_)) {
             break;
           }
