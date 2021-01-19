@@ -1,8 +1,9 @@
 use super::constants::*;
 use super::error::Error;
-use super::operation::{Operation, OperationKind};
 use crate::lexer;
+use crate::operation::{self, Operation};
 use std::cmp::min;
+use std::hint;
 
 pub fn handle_terminator<'a, 'b>(
   tokens: &'b [lexer::Token<'a>],
@@ -11,11 +12,13 @@ pub fn handle_terminator<'a, 'b>(
 ) -> Result<Operation, Error<'a>> {
   let get_terminators = |op_kind| -> &[lexer::TokenValue] {
     match op_kind {
-      OperationKind::Unknown => {
+      operation::Unknown => {
         panic!("Unknown operations should not be passed to handle_terminator")
       }
-      OperationKind::Create | OperationKind::Add => &[SEPARATOR_OVERWRITE, SEPARATOR_FAIL_SILENTLY],
-      OperationKind::Show | OperationKind::Remove => &[SEPARATOR_FAIL_SILENTLY],
+      operation::Create | operation::Add => {
+        &[SEPARATOR, SEPARATOR_OVERWRITE, SEPARATOR_FAIL_SILENTLY]
+      }
+      operation::Show | operation::Remove => &[SEPARATOR, SEPARATOR_FAIL_SILENTLY],
     }
   };
   match tokens.len() {
@@ -44,11 +47,7 @@ pub fn handle_terminator<'a, 'b>(
         )
       })
     }
-    _ => panic!(
-      "Invalid input for handle_terminator, expected 1 or no tokens, got {}: {:#?}",
-      tokens.len(),
-      tokens
-    ),
+    _ => unsafe { hint::unreachable_unchecked() },
   }
 }
 
@@ -102,6 +101,7 @@ fn get_string_from_tokens(tokens: &[lexer::Token]) -> String {
 
 type ParseListError<'a> = (Option<lexer::Token<'a>>, bool);
 
+// FIXME: Handle "elem, and elem" case
 pub fn parse_list<'a, 'b>(
   tokens: &'b [lexer::Token<'a>],
   terminators: &[lexer::TokenValue],
@@ -140,13 +140,15 @@ pub fn parse_list<'a, 'b>(
         .cloned(),
       true,
     ))
+  } else if i > tokens.len() {
+    Err((tokens.last().cloned(), false))
   } else {
     Ok((ret, i))
   }
 }
 
 pub fn get_parse_list_error_handler_generator<'a>(
-  op_kind: OperationKind,
+  op_kind: operation::OperationKind,
   op_token: lexer::Token<'a>,
 ) -> impl Fn(
   &'static [lexer::TokenValue<'static>],
@@ -175,11 +177,16 @@ pub fn get_parse_list_error_handler_generator<'a>(
         Error::new(
           op_kind,
           op_token,
-          t,
+          t.filter(|v| !matches!(v.value, lexer::Word(_))),
           Some([EXPECTED, terminators].concat().into()),
-          t.map(|v| v.value)
-            .filter(|v| RESERVED.contains(&v))
-            .map(|v| format!("Can't use {} in lists, it's reserved!", v).into()),
+          Some(
+            t.map(|v| v.value)
+              .filter(|v| RESERVED.contains(&v))
+              .map_or_else(
+                || "The list you entered is not terminated!".into(),
+                |v| format!("Can't use {} in lists, it's reserved!", v).into(),
+              ),
+          ),
         )
       }
     })
