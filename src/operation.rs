@@ -31,7 +31,7 @@ pub struct Operation {
   overwrite: Option<bool>,
 }
 
-use self::OperationKind::*;
+pub use self::OperationKind::*;
 
 impl Operation {
   pub fn unknown() -> Self {
