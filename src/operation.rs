@@ -10,63 +10,79 @@ pub enum OperationKind {
   Show,
 }
 
+impl fmt::Display for OperationKind {
+  fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+    fmt.write_str(match *self {
+      Unknown => "Unknown",
+      Create => "Create",
+      Remove => "Remove",
+      Add => "Add",
+      Show => "Show",
+    })
+  }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Operation {
   kind: OperationKind,
-  department: Option<String>,
+  departments: Option<Vec<String>>,
   fail_silently: Option<bool>,
   names: Option<Vec<String>>,
   overwrite: Option<bool>,
 }
 
-use self::OperationKind::*;
+pub use self::OperationKind::*;
 
 impl Operation {
   pub fn unknown() -> Self {
-    Operation {
+    Self {
       kind: Unknown,
-      department: None,
+      departments: None,
       fail_silently: None,
       names: None,
       overwrite: None,
     }
   }
 
-  pub fn create(department: String, fail_silently: bool, overwrite: bool) -> Self {
-    Operation {
+  pub fn create(departments: Vec<String>, fail_silently: bool, overwrite: bool) -> Self {
+    Self {
       kind: Create,
-      department: Some(department),
+      departments: Some(departments),
       fail_silently: Some(fail_silently),
       overwrite: Some(overwrite),
       ..Self::unknown()
     }
   }
 
-  pub fn remove(department: String, fail_silently: bool, names: Vec<String>) -> Self {
-    Operation {
+  pub fn remove(departments: Vec<String>, fail_silently: bool, names: Vec<String>) -> Self {
+    Self {
       kind: Remove,
-      department: Some(department),
+      departments: Some(departments),
       fail_silently: Some(fail_silently),
       names: Some(names),
       ..Self::unknown()
     }
   }
 
-  pub fn add(department: String, fail_silently: bool, names: Vec<String>, overwrite: bool) -> Self {
-    Operation {
+  pub fn add(
+    departments: Vec<String>,
+    fail_silently: bool,
+    names: Vec<String>,
+    overwrite: bool,
+  ) -> Self {
+    Self {
       kind: Add,
-      department: Some(department),
+      departments: Some(departments),
       fail_silently: Some(fail_silently),
       names: Some(names),
       overwrite: Some(overwrite),
-      ..Self::unknown()
     }
   }
 
-  pub fn show(department: String, fail_silently: bool) -> Self {
-    Operation {
+  pub fn show(departments: Vec<String>, fail_silently: bool) -> Self {
+    Self {
       kind: Show,
-      department: Some(department),
+      departments: Some(departments),
       fail_silently: Some(fail_silently),
       ..Self::unknown()
     }
@@ -76,12 +92,12 @@ impl Operation {
     self.kind
   }
 
-  pub fn get_department(&self) -> Option<&str> {
-    self.department.as_deref()
+  pub fn get_departments(&self) -> Option<&[String]> {
+    self.departments.as_deref()
   }
 
-  pub fn department(&self) -> &str {
-    self.get_department().unwrap()
+  pub fn departments(&self) -> &[String] {
+    self.get_departments().unwrap()
   }
 
   pub fn get_fail_silently(&self) -> Option<bool> {
@@ -108,48 +124,32 @@ impl Operation {
     self.get_overwrite().unwrap()
   }
 
-  pub fn set_department(self, department: String) -> Option<Self> {
-    if let Some(_) = self.department {
-      Some(Self {
-        department: Some(department),
-        ..self
-      })
-    } else {
-      None
-    }
+  pub fn set_departments(self, departments: Vec<String>) -> Option<Self> {
+    self.departments.and(Some(Self {
+      departments: Some(departments),
+      ..self
+    }))
   }
 
   pub fn set_fail_silently(self, fail_silently: bool) -> Option<Self> {
-    if let Some(_) = self.fail_silently {
-      Some(Self {
-        fail_silently: Some(fail_silently),
-        ..self
-      })
-    } else {
-      None
-    }
+    self.fail_silently.and(Some(Self {
+      fail_silently: Some(fail_silently),
+      ..self
+    }))
   }
 
   pub fn set_names(self, names: Vec<String>) -> Option<Self> {
-    if let Some(_) = self.names {
-      Some(Self {
-        names: Some(names),
-        ..self
-      })
-    } else {
-      None
-    }
+    self.names.and(Some(Self {
+      names: Some(names),
+      ..self
+    }))
   }
 
   pub fn set_overwrite(self, overwrite: bool) -> Option<Self> {
-    if let Some(_) = self.overwrite {
-      Some(Self {
-        overwrite: Some(overwrite),
-        ..self
-      })
-    } else {
-      None
-    }
+    self.overwrite.and(Some(Self {
+      overwrite: Some(overwrite),
+      ..self
+    }))
   }
 }
 
@@ -163,7 +163,7 @@ fn fmt_modifier(op: &Operation) -> &'static str {
   }
 }
 
-pub fn fmt_names(elems: &[String], linker: &str) -> String {
+fn fmt_names(elems: &[String], linker: &str) -> String {
   let names = util::fmt_list(elems, ", ", "and");
   if names.is_empty() {
     names
@@ -174,18 +174,27 @@ pub fn fmt_names(elems: &[String], linker: &str) -> String {
 
 impl fmt::Display for Operation {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    let statement = match self.kind {
-      Unknown => return f.write_str("Unknown"),
-      Create => String::from("Create"),
-      Show => String::from("Show"),
-      Add => format!("Add{}", fmt_names(self.names(), "to")),
-      Remove => format!("Remove{}", fmt_names(self.names(), "from")),
+    let statement = match self.kind() {
+      Unknown => return self.kind().fmt(f),
+      Create | Show => self.kind().to_string(),
+      _ => format!(
+        "{}{}",
+        self.kind(),
+        fmt_names(
+          self.names(),
+          match self.kind() {
+            Add => "to",
+            Remove => "from",
+            _ => "",
+          }
+        )
+      ),
     };
     write!(
       f,
       "{} {}{}",
       statement,
-      self.department(),
+      util::fmt_list(self.departments(), ", ", "and"),
       fmt_modifier(self)
     )
   }
@@ -201,22 +210,29 @@ mod test {
       (Operation::unknown(), "Unknown"),
       (
         Operation::add(
-          "Science".into(),
+          util::to_string_vec(vec!["Science", "Engineering"]),
           false,
           vec!["Mama".into(), "Tata".into(), "Bunica Miha".into()],
           false,
         ),
-        "Add Mama, Tata, and Bunica Miha to Science",
+        "Add Mama, Tata, and Bunica Miha to Science and Engineering",
       ),
       (
-        Operation::remove("Engineering".into(), true, vec!["Sally".into()]),
+        Operation::remove(
+          util::to_string_vec(vec!["Engineering"]),
+          true,
+          vec!["Sally".into()],
+        ),
         "Remove Sally from Engineering (fail silently)",
       ),
       (
-        Operation::create("Sales".into(), false, true),
+        Operation::create(util::to_string_vec(vec!["Sales"]), false, true),
         "Create Sales (overwrite if existing)",
       ),
-      (Operation::show("HR".into(), false), "Show HR"),
+      (
+        Operation::show(util::to_string_vec(vec!["HR"]), false),
+        "Show HR",
+      ),
     ];
 
     ops

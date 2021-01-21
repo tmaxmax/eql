@@ -9,23 +9,9 @@ pub fn is_alphabetic(s: &str) -> bool {
   s.chars().map(GeneralCategory::of).all(|c| c.is_letter())
 }
 
-//pub fn is_numeric(s: &str) -> bool {
-//  s.chars().map(GeneralCategory::of).all(|c| c.is_number())
-//}
-
-//pub fn is_separator(s: &str) -> bool {
-//  s.chars().map(GeneralCategory::of).all(|c| c.is_separator())
-//}
-
 pub fn is_whitespace(s: &str) -> bool {
   s.chars().all(char::is_whitespace)
 }
-
-//pub fn is_punctuation(s: &str) -> bool {
-//  s.chars()
-//    .map(GeneralCategory::of)
-//    .all(|c| c.is_punctuation())
-//}
 
 pub fn string_length(word: &str) -> usize {
   word.graphemes(true).count()
@@ -44,12 +30,9 @@ pub fn fmt_list<'a, T: std::fmt::Display>(elems: &'a [T], sep: &str, linker: &st
       format!("{}", last)
     } else {
       format!(
-        "{}, {} {}",
-        rest
-          .iter()
-          .map(|e| format!("{}", e))
-          .collect::<Vec<_>>()
-          .join(sep),
+        "{}{} {} {}",
+        rest.iter().map(T::to_string).collect::<Vec<_>>().join(sep),
+        if rest.len() == 1 { "" } else { "," },
         linker,
         last
       )
@@ -57,4 +40,8 @@ pub fn fmt_list<'a, T: std::fmt::Display>(elems: &'a [T], sep: &str, linker: &st
   } else {
     "".into()
   }
+}
+
+pub fn to_string_vec(v: Vec<&str>) -> Vec<String> {
+  v.into_iter().map(String::from).collect()
 }
