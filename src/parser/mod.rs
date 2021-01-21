@@ -1,159 +1,205 @@
+mod constants;
 mod error;
-mod operation;
+mod util;
+
+use self::constants::*;
 pub use self::error::*;
-pub use self::operation::*;
-
+use self::util::*;
 use super::lexer;
-use std::borrow::Cow;
+use crate::operation::{self, Operation};
+use std::cmp::min;
+use std::hint;
 
-const KEYWORD_ADD: lexer::TokenValue = lexer::TokenValue::Word("Add");
-const KEYWORD_CREATE: lexer::TokenValue = lexer::TokenValue::Word("Create");
-const KEYWORD_REMOVE: lexer::TokenValue = lexer::TokenValue::Word("Remove");
-const KEYWORD_SHOW: lexer::TokenValue = lexer::TokenValue::Word("Show");
-
-const LINKER_AND: lexer::TokenValue = lexer::TokenValue::Word("and");
-const LINKER_TO: lexer::TokenValue = lexer::TokenValue::Word("to");
-const LINKER_FROM: lexer::TokenValue = lexer::TokenValue::Word("from");
-
-const RESERVED: [lexer::TokenValue; 7] = [
-  KEYWORD_ADD,
-  KEYWORD_CREATE,
-  KEYWORD_REMOVE,
-  KEYWORD_SHOW,
-  LINKER_AND,
-  LINKER_TO,
-  LINKER_FROM,
-];
-
-const SEPARATOR: lexer::TokenValue = lexer::TokenValue::Punctuation(".");
-const SEPARATOR_OVERWRITE: lexer::TokenValue = lexer::TokenValue::Punctuation("!");
-const SEPARATOR_FAIL_SILENTLY: lexer::TokenValue = lexer::TokenValue::Punctuation("?");
-const SEPARATOR_VALUES: lexer::TokenValue = lexer::TokenValue::Punctuation(",");
-const TERMINATORS: &[lexer::TokenValue] =
-  &[SEPARATOR, SEPARATOR_OVERWRITE, SEPARATOR_FAIL_SILENTLY];
-
-fn is_operation_separator(t: lexer::TokenValue) -> bool {
-  matches!(t, SEPARATOR | SEPARATOR_OVERWRITE | SEPARATOR_FAIL_SILENTLY)
+fn parse_add<'a, 'b>(
+  op_token: lexer::Token<'a>,
+  tokens: &'b [lexer::Token<'a>],
+) -> Result<Operation, Error<'a>> {
+  let error_handler = get_parse_list_error_handler_generator(operation::Add, op_token);
+  let (names, i) = parse_list(tokens, &[LINKER_TO]).map_err(error_handler(&[LINKER_TO], "name"))?;
+  let (departments, j) = parse_list(&tokens[i + 1..], &TERMINATORS)
+    .map_err(error_handler(&TERMINATORS, "department"))?;
+  handle_terminator(
+    &tokens[min(i + j + 1, tokens.len())..],
+    Operation::add(departments, false, names, false),
+    op_token,
+  )
 }
 
-trait TokenIterator<'a> {}
-
-fn handle_separator<'a>(
-  it: &mut (impl Iterator<Item = lexer::Token<'a>> + Clone),
-  op: Operation,
+fn parse_create<'a, 'b>(
   op_token: lexer::Token<'a>,
+  tokens: &'b [lexer::Token<'a>],
 ) -> Result<Operation, Error<'a>> {
-  let separator = it.skip_while(|t| is_operation_separator(t.value)).next();
-  if let Some(sep) = separator {
-    unimplemented!()
+  let error_handler = get_parse_list_error_handler_generator(operation::Create, op_token);
+  let (departments, i) =
+    parse_list(tokens, &TERMINATORS).map_err(error_handler(&TERMINATORS, "department"))?;
+  handle_terminator(
+    &tokens[min(i, tokens.len())..],
+    Operation::create(departments, false, false),
+    op_token,
+  )
+}
+
+fn parse_show<'a, 'b>(
+  op_token: lexer::Token<'a>,
+  tokens: &'b [lexer::Token<'a>],
+) -> Result<Operation, Error<'a>> {
+  let error_handler = get_parse_list_error_handler_generator(operation::Show, op_token);
+  let (departments, i) =
+    parse_list(tokens, &TERMINATORS).map_err(error_handler(&TERMINATORS, "department"))?;
+  handle_terminator(
+    &tokens[min(i, tokens.len())..],
+    Operation::show(departments, false),
+    op_token,
+  )
+}
+
+fn parse_remove<'a, 'b>(
+  op_token: lexer::Token<'a>,
+  tokens: &'b [lexer::Token<'a>],
+) -> Result<Operation, Error<'a>> {
+  let error_handler = get_parse_list_error_handler_generator(operation::Remove, op_token);
+  const LIST_TERMINATORS: [lexer::TokenValue; 4] = [
+    LINKER_FROM,
+    SEPARATOR,
+    SEPARATOR_OVERWRITE,
+    SEPARATOR_FAIL_SILENTLY,
+  ];
+  let (first_list, i) = parse_list(tokens, &LIST_TERMINATORS)
+    .map_err(error_handler(&TERMINATORS, "name or department"))?;
+  let (second_list, j) = parse_list(&tokens[i + 1..], &TERMINATORS)
+    .map_err(error_handler(&TERMINATORS, "department"))
+    .unwrap_or_default();
+  let (names, departments, j) = if second_list.is_empty() {
+    (first_list, second_list, j)
   } else {
-    Err(Error::new(op, op_token, None, Some(TERMINATORS), None))
-  }
-}
-
-fn parse_names<'a>(
-  tokens: &mut impl Iterator<Item = lexer::Token<'a>>,
-) -> Result<Vec<String>, Error> {
-  unimplemented!();
-}
-
-fn push_token<'a>(v: &mut Vec<lexer::TokenValue<'a>>, token: &lexer::Token<'a>) -> bool {
-  match token.value {
-    lexer::Word(_) => {
-      v.push(token.value);
-      true
-    }
-    lexer::Whitespace => {
-      if let Some(last) = v.last() {
-        match last {
-          lexer::Word(_) => v.push(token.value),
-          _ => {}
-        }
-      }
-      true
-    }
-    _ => false,
-  }
-}
-
-fn parse_add<'a>(
-  op_token: lexer::Token<'a>,
-  tokens: &mut (impl Iterator<Item = lexer::Token<'a>> + Clone),
-) -> Result<Operation, Error<'a>> {
-  const ALLOWED_TOKENS: &[lexer::TokenValue] = &[lexer::Word(""), lexer::Whitespace];
-
-  let mut it = tokens
-    .clone()
-    .take_while(|t| !is_operation_separator(t.value));
-  let op = Operation::add(String::new(), false, Vec::new(), false);
-  let make_error = |token: lexer::Token<'a>, details: Option<Cow<'static, str>>| {
-    Error::new(op, op_token, Some(token), Some(ALLOWED_TOKENS), details)
+    (second_list, first_list, j + 1)
   };
-
-  let mut names: Vec<String> = Vec::new();
-  let mut name = Vec::new();
-  for token in it {
-    if push_token(&mut name, &token) {
-      continue;
-    }
-    match token.value {
-      SEPARATOR_VALUES | LINKER_AND => {
-        if name.is_empty() {
-          return Err(make_error(
-            token,
-            Some(format!("You didn't write any name before {}", token.value).into()),
-          ));
-        }
-        names.push(name.into_iter().map(|t| t.get()).collect());
-      }
-      LINKER_TO => {
-        break;
-      }
-      _ => {
-        return Err(make_error(
-          token,
-          if RESERVED.contains(&token.value) {
-            Some(format!("{} is reserved", token.value).into())
-          } else {
-            None
-          },
-        ))
-      }
-    }
-  }
-
-  let mut department = Vec::new();
-  for token in it {
-    if push_token(&mut department, &token) {
-      continue;
-    }
-    return Err(make_error(token, None));
-  }
-
-  handle_separator(tokens, op, op_token)
+  handle_terminator(
+    &tokens[min(i + j, tokens.len())..],
+    Operation::remove(names, false, departments),
+    op_token,
+  )
 }
 
 pub fn parse(tokens: Vec<lexer::Token>) -> Result<Vec<Operation>, Error> {
   let mut res = Vec::new();
-  let mut it = tokens.into_iter();
 
-  while let Some(token) = it.next() {
+  let mut i = 0;
+  while i < tokens.len() {
+    let token = tokens[i];
     match token.value {
-      KEYWORD_ADD => res.push(parse_add(token, &mut it)?),
       lexer::Whitespace => {}
+      KEYWORD_ADD | KEYWORD_CREATE | KEYWORD_SHOW | KEYWORD_REMOVE => {
+        let op_tokens = get_operation_tokens(&tokens[i + 1..]);
+        i += op_tokens.len();
+        res.push(match token.value {
+          KEYWORD_ADD => parse_add,
+          KEYWORD_CREATE => parse_create,
+          KEYWORD_SHOW => parse_show,
+          KEYWORD_REMOVE => parse_remove,
+          _ => unsafe { hint::unreachable_unchecked() },
+        }(token, op_tokens)?);
+      }
       _ => {
         return Err(Error::new(
-          Operation::unknown(),
+          operation::Unknown,
           token,
           Some(token),
-          None,
-          None,
+          Some({
+            let k = &KEYWORDS[..];
+            k.into()
+          }),
+          Some("You must input an operation!".into()),
         ))
       }
     }
+    i += 1;
   }
 
   Ok(res)
 }
 
-// TODO: Rest of operations + tests
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::util;
+
+  #[test]
+  fn test_parse_add() {
+    let test_sources = &[
+      "Add Mihai, Andrei and Ioan to Science and Engineering!",
+      "Add Mihai, Andrei and Ioan to Science and Engineering",
+      "Add Mihai, Andrei and Ioan to .",
+      "Add Mihai, Andrei and Ioan.",
+      "Add to?",
+      "Add Mihai",
+      "Add!",
+    ];
+    type FnExpect = fn(Result<Operation, Error>) -> bool;
+    let expect: &[FnExpect] = &[
+      |res| {
+        res
+          == Ok(Operation::add(
+            util::to_string_vec(vec!["Science", "Engineering"]),
+            false,
+            util::to_string_vec(vec!["Mihai", "Andrei", "Ioan"]),
+            true,
+          ))
+      },
+      |res| res.is_err(),
+      |res| res.is_err(),
+      |res| res.is_err(),
+      |res| res.is_err(),
+      |res| res.is_err(),
+      |res| res.is_err(),
+    ];
+    test_sources
+      .iter()
+      .map(|s| lexer::lex(s).unwrap())
+      .map(|t| parse_add(t[0], &t[1..]))
+      .zip(expect.iter())
+      .for_each(|(res, f)| assert!(f(res)));
+  }
+
+  #[test]
+  fn test_parse_create() {
+    let tokens = lexer::lex("Create Science, Engineering and Physics.").unwrap();
+    let expect = Operation::create(
+      util::to_string_vec(vec!["Science", "Engineering", "Physics"]),
+      false,
+      false,
+    );
+    let got = parse(tokens).unwrap();
+    assert_eq!(got[0], expect);
+  }
+
+  #[test]
+  fn test_parse_show() {
+    let tokens = lexer::lex("Show Science, Engineering and Physics?").unwrap();
+    let expect = Operation::show(
+      util::to_string_vec(vec!["Science", "Engineering", "Physics"]),
+      true,
+    );
+    let got = parse(tokens).unwrap();
+    assert_eq!(got[0], expect);
+  }
+
+  #[test]
+  fn test_parse_remove() {
+    let source = vec!["Remove Science.", "Remove Michael from Physics?"];
+    let expect = vec![
+      Operation::remove(util::to_string_vec(vec!["Science"]), false, vec![]),
+      Operation::remove(
+        util::to_string_vec(vec!["Physics"]),
+        true,
+        util::to_string_vec(vec!["Michael"]),
+      ),
+    ];
+    source
+      .into_iter()
+      .map(|s| parse(lexer::lex(s).unwrap()).unwrap())
+      .zip(expect.into_iter())
+      .for_each(|(got, expected)| assert_eq!(got[0], expected));
+  }
+  // TODO: more tests
+}

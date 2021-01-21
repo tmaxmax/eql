@@ -1,6 +1,6 @@
 use crate::util;
 use bstr::{ByteSlice, B};
-use std::fmt;
+use std::{default, fmt};
 use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -29,11 +29,17 @@ impl TokenValue<'_> {
 impl fmt::Display for TokenValue<'_> {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     let (t, v) = self.get_type_and_value();
-    if v.is_empty() {
+    if v.is_empty() || matches!(*self, Whitespace) {
       write!(f, "any {} token", t)
     } else {
       write!(f, "{} token \"{}\"", t, v)
     }
+  }
+}
+
+impl default::Default for TokenValue<'_> {
+  fn default() -> Self {
+    Unknown("")
   }
 }
 
@@ -73,18 +79,25 @@ impl fmt::Display for Error<'_> {
     write!(
       f,
       "Error on line {}, column {}: {}\n  {}\n  {}{}",
-      token.line_number, token.column_number, token.value, token.line, padding, pointer
+      token.line_number, token.column_number, token.value, token.line.trim_end(), padding, pointer
     )
   }
 }
 
+impl std::error::Error for Error<'_> {}
+
 fn is_punctuation(s: &str) -> bool {
   let b = s.as_bytes();
-  b.len() == 1
-    && match b[0] {
-      b',' | b'.' | b'!' | b'?' => true,
-      _ => false,
-    }
+  b.len() == 1 && matches!(b[0], b',' | b'.' | b'!' | b'?')
+}
+
+fn get_token_value(s: &str) -> TokenValue {
+  match () {
+    _ if util::is_whitespace(s) => Whitespace,
+    _ if is_punctuation(s) => Punctuation(s),
+    _ if util::is_alphabetic(s) => Word(s),
+    _ => Unknown(s),
+  }
 }
 
 fn get_token<'a>(
@@ -94,12 +107,7 @@ fn get_token<'a>(
   line: &'a str,
 ) -> Result<Token<'a>, Error<'a>> {
   let token = Token {
-    value: match () {
-      _ if util::is_whitespace(s) => Whitespace,
-      _ if is_punctuation(s) => Punctuation(s),
-      _ if util::is_alphabetic(s) => Word(s),
-      _ => Unknown(s),
-    },
+    value: get_token_value(s),
     line,
     line_number,
     column_number,
@@ -111,7 +119,7 @@ fn get_token<'a>(
 }
 
 pub fn lex(s: &str) -> Result<Vec<Token>, Error> {
-  B(s.trim())
+  B(s)
     .lines_with_terminator()
     .map(|line| unsafe { line.to_str_unchecked() })
     .enumerate()
@@ -124,6 +132,10 @@ pub fn lex(s: &str) -> Result<Vec<Token>, Error> {
       })
     })
     .collect()
+}
+
+pub fn last_token_value(s: &str) -> Option<TokenValue> {
+  s.split_word_bounds().map(get_token_value).rev().next()
 }
 
 #[cfg(test)]
@@ -141,7 +153,13 @@ mod test {
   fn lex_whitespace() {
     let source = " \n\r\n\t";
     let got = lex(source).expect("Lex must succeed");
-    assert!(got.is_empty());
+    let expect = vec![
+      Token::new(Whitespace, " \n", 1, 1),
+      Token::new(Whitespace, " \n", 1, 2),
+      Token::new(Whitespace, "\r\n", 2, 1),
+      Token::new(Whitespace, "\t", 3, 1),
+    ];
+    assert_eq!(got, expect);
   }
 
   #[test]
@@ -195,15 +213,9 @@ mod test {
       "+",        // Sm Math Symbol
       "\u{00A6}", // So Other Symbol
     ];
-    let accepted_count = chars
-      .iter()
-      .enumerate()
-      .filter_map::<(), _>(|(i, c)| match lex(c) {
-        Ok(res) => panic!("({}, {:?})", i, res),
-        Err(_) => None,
-      })
-      .count();
-    assert_eq!(accepted_count, 0);
+    chars.into_iter().map(lex).for_each(|r| {
+      r.unwrap_err();
+    });
   }
 
   #[test]
@@ -216,5 +228,5 @@ mod test {
     assert_eq!(got, expect);
   }
 
-  // TODO: Update tests for empty value token
+  // TODO: More tests (formatting of tokens and error messages)
 }
