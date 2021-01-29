@@ -1,53 +1,53 @@
 use super::constants::*;
 use super::error::Error;
 use crate::lexer;
-use crate::operation::{self, Operation};
+use crate::operation::{Modifier, Operation};
 use std::cmp::min;
-use std::hint;
 
 pub fn handle_terminator<'a, 'b>(
   tokens: &'b [lexer::Token<'a>],
   op: Operation,
   op_token: lexer::Token<'a>,
 ) -> Result<Operation, Error<'a>> {
-  let get_terminators = |op_kind| -> &[lexer::TokenValue] {
-    match op_kind {
-      operation::Unknown => {
+  let get_terminators = |o: &Operation| -> &[lexer::TokenValue] {
+    match o {
+      Operation::Unknown => {
         panic!("Unknown operations should not be passed to handle_terminator")
       }
-      operation::Create | operation::Add => {
+      Operation::Create(_) | Operation::Add(_) => {
         &[SEPARATOR, SEPARATOR_OVERWRITE, SEPARATOR_FAIL_SILENTLY]
       }
-      operation::Show | operation::Remove => &[SEPARATOR, SEPARATOR_FAIL_SILENTLY],
+      Operation::Show(_) | Operation::Remove(_) => &[SEPARATOR, SEPARATOR_FAIL_SILENTLY],
     }
   };
   match tokens.len() {
     0 => Err(Error::new(
-      op.kind(),
+      op.keyword(),
       op_token,
       None,
-      Some(get_terminators(op.kind()).into()),
+      Some(get_terminators(&op).into()),
       Some("You didn't terminate your operation!".into()),
     )),
     1 => {
       let value = tokens[0].value;
-      let op_kind = op.kind();
+      let op_keyword = op.keyword();
+      let terminators = get_terminators(&op);
       match value {
-        SEPARATOR_OVERWRITE => op.set_overwrite(true),
-        SEPARATOR_FAIL_SILENTLY => op.set_fail_silently(true),
+        SEPARATOR_OVERWRITE => op.set_modifier(Modifier::Overwrite),
+        SEPARATOR_FAIL_SILENTLY => op.set_modifier(Modifier::FailSilently),
         _ => Some(op),
       }
       .ok_or_else(|| {
         Error::new(
-          op_kind,
+          op_keyword,
           op_token,
           Some(tokens[0]),
-          Some(get_terminators(op_kind).into()),
-          Some(format!("{} is not a valid terminator for the operation", value).into()),
+          Some(terminators.into()),
+          Some(format!("{} is not a valid modifier for the operation", value).into()),
         )
       })
     }
-    _ => unsafe { hint::unreachable_unchecked() },
+    _ => unreachable!(),
   }
 }
 
@@ -148,7 +148,7 @@ pub fn parse_list<'a, 'b>(
 }
 
 pub fn get_parse_list_error_handler_generator<'a>(
-  op_kind: operation::OperationKind,
+  op_keyword: &'static str,
   op_token: lexer::Token<'a>,
 ) -> impl Fn(
   &'static [lexer::TokenValue<'static>],
@@ -159,7 +159,7 @@ pub fn get_parse_list_error_handler_generator<'a>(
       const EXPECTED: &[lexer::TokenValue] = &[lexer::Whitespace, lexer::Word("")];
       if is_empty {
         Error::new(
-          op_kind,
+          op_keyword,
           op_token,
           t,
           Some(EXPECTED.into()),
@@ -175,7 +175,7 @@ pub fn get_parse_list_error_handler_generator<'a>(
         )
       } else {
         Error::new(
-          op_kind,
+          op_keyword,
           op_token,
           t.filter(|v| !matches!(v.value, lexer::Word(_))),
           Some([EXPECTED, terminators].concat().into()),

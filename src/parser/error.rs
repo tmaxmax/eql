@@ -1,5 +1,4 @@
 use super::lexer;
-use crate::operation;
 use crate::util;
 use std::borrow::Cow;
 use std::error;
@@ -7,7 +6,7 @@ use std::fmt;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Error<'a> {
-  operation_kind: operation::OperationKind,
+  operation_keyword: &'static str,
   operation_token: lexer::Token<'a>,
   unexpected_token: Option<lexer::Token<'a>>,
   expected_tokens: Option<Cow<'static, [lexer::TokenValue<'static>]>>,
@@ -16,14 +15,14 @@ pub struct Error<'a> {
 
 impl<'a> Error<'a> {
   pub fn new(
-    operation_kind: operation::OperationKind,
+    operation_keyword: &'static str,
     operation_token: lexer::Token<'a>,
     unexpected_token: Option<lexer::Token<'a>>,
     expected_tokens: Option<Cow<'static, [lexer::TokenValue<'static>]>>,
     details: Option<Cow<'static, str>>,
   ) -> Self {
     Error {
-      operation_kind,
+      operation_keyword,
       operation_token,
       unexpected_token,
       expected_tokens,
@@ -46,7 +45,12 @@ fn fmt_unexpected(e: &Error) -> String {
           "\n{} on line {}, column {}:
   {}
   {}{}",
-          s, un_token.line_number, un_token.column_number, un_token.line.trim_end(), padding, pointer
+          s,
+          un_token.line_number,
+          un_token.column_number,
+          un_token.line.trim_end(),
+          padding,
+          pointer
         )
       } else {
         let offset = un_token.column_number
@@ -85,7 +89,7 @@ impl fmt::Display for Error<'_> {
     write!(
       f,
       "Error on {} operation on line {}, column {}:\n  {}\n  {}{}{}{}{}",
-      self.operation_kind,
+      self.operation_keyword,
       un_token.line_number,
       un_token.column_number,
       op_token.line.trim_end(),

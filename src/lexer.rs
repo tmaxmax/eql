@@ -79,7 +79,12 @@ impl fmt::Display for Error<'_> {
     write!(
       f,
       "Error on line {}, column {}: {}\n  {}\n  {}{}",
-      token.line_number, token.column_number, token.value, token.line.trim_end(), padding, pointer
+      token.line_number,
+      token.column_number,
+      token.value,
+      token.line.trim_end(),
+      padding,
+      pointer
     )
   }
 }

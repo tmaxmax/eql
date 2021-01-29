@@ -1,9 +1,10 @@
 use crate::lexer::*;
+use crate::operation;
 
-pub const KEYWORD_ADD: TokenValue = Word("Add");
-pub const KEYWORD_CREATE: TokenValue = Word("Create");
-pub const KEYWORD_REMOVE: TokenValue = Word("Remove");
-pub const KEYWORD_SHOW: TokenValue = Word("Show");
+pub const KEYWORD_ADD: TokenValue = Word(operation::OperationAdd::keyword());
+pub const KEYWORD_CREATE: TokenValue = Word(operation::OperationCreate::keyword());
+pub const KEYWORD_REMOVE: TokenValue = Word(operation::OperationRemove::keyword());
+pub const KEYWORD_SHOW: TokenValue = Word(operation::OperationShow::keyword());
 pub const KEYWORDS: [TokenValue; 4] = [KEYWORD_ADD, KEYWORD_CREATE, KEYWORD_REMOVE, KEYWORD_SHOW];
 
 pub const LINKER_AND: TokenValue = Word("and");
