@@ -51,29 +51,37 @@ pub fn handle_terminator<'a, 'b>(
   }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ListElement<'a, 'b> {
+  tokens: &'b [lexer::Token<'a>],
+  consumed_count: usize,
+  is_last_consumed_terminator: bool,
+}
+
 fn get_list_element_tokens<'a, 'b>(
   tokens: &'b [lexer::Token<'a>],
   terminators: &[lexer::TokenValue],
-) -> Result<(&'b [lexer::Token<'a>], usize, bool), usize> {
+) -> Result<ListElement<'a, 'b>, usize> {
   let mut last_word_index = 0;
   let mut first_word_index = None;
 
   for i in 0..tokens.len() {
     let token = tokens[i];
+
     match token.value {
       SEPARATOR_VALUES | LINKER_AND => {
-        return Ok((
-          &tokens[first_word_index.unwrap_or_default()..=last_word_index],
-          i,
-          false,
-        ))
+        return Ok(ListElement {
+          tokens: &tokens[first_word_index.unwrap_or_default()..=last_word_index],
+          consumed_count: i,
+          is_last_consumed_terminator: false,
+        });
       }
       _ if terminators.contains(&token.value) => {
-        return Ok((
-          &tokens[first_word_index.unwrap_or_default()..=last_word_index],
-          i,
-          true,
-        ))
+        return Ok(ListElement {
+          tokens: &tokens[first_word_index.unwrap_or_default()..=last_word_index],
+          consumed_count: i,
+          is_last_consumed_terminator: true,
+        });
       }
       lexer::Whitespace => {}
       lexer::Word(_) => {
@@ -86,11 +94,11 @@ fn get_list_element_tokens<'a, 'b>(
       _ => return Err(i),
     }
   }
-  Ok((
-    &tokens[first_word_index.unwrap_or_default()..=last_word_index],
-    tokens.len(),
-    false,
-  ))
+  Ok(ListElement {
+    tokens: &tokens[first_word_index.unwrap_or_default()..=last_word_index],
+    consumed_count: tokens.len(),
+    is_last_consumed_terminator: false,
+  })
 }
 
 fn get_string_from_tokens(tokens: &[lexer::Token]) -> String {
@@ -99,7 +107,11 @@ fn get_string_from_tokens(tokens: &[lexer::Token]) -> String {
   v.into_iter().map(|t| t.value.get().to_string()).collect()
 }
 
-type ParseListError<'a> = (Option<lexer::Token<'a>>, bool);
+#[derive(Clone, Debug)]
+pub struct ParseListError<'a> {
+  unexpected_token: Option<lexer::Token<'a>>,
+  has_parsed_elements: bool,
+}
 
 // FIXME: Handle "elem, and elem" case
 pub fn parse_list<'a, 'b>(
@@ -107,6 +119,7 @@ pub fn parse_list<'a, 'b>(
   terminators: &[lexer::TokenValue],
 ) -> Result<(Vec<String>, usize), ParseListError<'a>> {
   let mut elements = Vec::new();
+  let mut last_linker = None;
 
   let mut i = 0;
   while i < tokens.len() {
@@ -115,33 +128,64 @@ pub fn parse_list<'a, 'b>(
     match token.value {
       lexer::Whitespace => {}
       _ if terminators.contains(&token.value) => break,
+      LINKER_AND => {
+        if elements.is_empty() {
+          break;
+        }
+        match last_linker {
+          Some(linker) => match linker {
+            SEPARATOR_VALUES => last_linker = Some(linker),
+            _ => {
+              return Err(ParseListError {
+                unexpected_token: Some(token),
+                has_parsed_elements: true,
+              })
+            }
+          },
+          _ => {
+            return Err(ParseListError {
+              unexpected_token: Some(token),
+              has_parsed_elements: true,
+            })
+          }
+        }
+      }
       lexer::Word(_) => match get_list_element_tokens(&tokens[i..], terminators) {
-        Ok((elem_tokens, incr, is_terminator)) => {
-          i += incr;
-          elements.push(elem_tokens);
-          if is_terminator {
+        Ok(elem) => {
+          i += elem.consumed_count;
+          elements.push(elem.tokens);
+          if elem.is_last_consumed_terminator {
             continue;
           }
+          last_linker = tokens.get(i).map(|t| t.value)
         }
         Err(incr) => {
           i += incr;
           continue;
         }
       },
-      _ => return Err((Some(token), elements.is_empty())),
+      _ => {
+        return Err(ParseListError {
+          unexpected_token: Some(token),
+          has_parsed_elements: !elements.is_empty(),
+        })
+      }
     }
     i += 1;
   }
   let ret: Vec<String> = elements.into_iter().map(get_string_from_tokens).collect();
   if ret.is_empty() {
-    Err((
-      tokens
+    Err(ParseListError {
+      unexpected_token: tokens
         .get(min(i, tokens.len().checked_sub(1).unwrap_or_default()))
         .cloned(),
-      true,
-    ))
+      has_parsed_elements: false,
+    })
   } else if i > tokens.len() {
-    Err((tokens.last().cloned(), false))
+    Err(ParseListError {
+      unexpected_token: tokens.last().cloned(),
+      has_parsed_elements: true,
+    })
   } else {
     Ok((ret, i))
   }
@@ -155,41 +199,59 @@ pub fn get_parse_list_error_handler_generator<'a>(
   &'static str,
 ) -> Box<dyn Fn(ParseListError<'a>) -> Error<'a> + 'a> {
   move |terminators, name| {
-    Box::new(move |(t, is_empty)| {
-      const EXPECTED: &[lexer::TokenValue] = &[lexer::Whitespace, lexer::Word("")];
-      if is_empty {
-        Error::new(
-          op_keyword,
-          op_token,
-          t,
-          Some(EXPECTED.into()),
-          Some(
-            format!(
-              "You must specify at least one {} before list terminator{}",
-              name,
-              t.map(|v| format!(" {}", v.value.to_string()))
-                .unwrap_or_default(),
-            )
-            .into(),
-          ),
-        )
-      } else {
-        Error::new(
-          op_keyword,
-          op_token,
-          t.filter(|v| !matches!(v.value, lexer::Word(_))),
-          Some([EXPECTED, terminators].concat().into()),
-          Some(
-            t.map(|v| v.value)
-              .filter(|v| RESERVED.contains(&v))
-              .map_or_else(
-                || "The list you entered is not terminated!".into(),
-                |v| format!("Can't use {} in lists, it's reserved!", v).into(),
-              ),
-          ),
-        )
-      }
-    })
+    Box::new(
+      move |ParseListError {
+              unexpected_token,
+              has_parsed_elements,
+            }| {
+        const EXPECTED: &[lexer::TokenValue] = &[lexer::Whitespace, lexer::Word("")];
+        if has_parsed_elements {
+          Error::new(
+            op_keyword,
+            op_token,
+            unexpected_token,
+            Some([EXPECTED, terminators].concat().into()),
+            Some(
+              unexpected_token
+                .map(|v| v.value)
+                .filter(|v| RESERVED.contains(&v))
+                .map_or_else(
+                  || format!("The {} list you entered is invalid!", name).into(),
+                  |v| format!("Can't use {} in lists, it's reserved!", v).into(),
+                ),
+            ),
+          )
+        } else {
+          Error::new(
+            op_keyword,
+            op_token,
+            unexpected_token,
+            Some(EXPECTED.into()),
+            Some(
+              format!(
+                "You must specify at least one {}{}",
+                name,
+                unexpected_token
+                  .map(|v| v.value)
+                  .map(|v| format!(
+                    " before {} {}",
+                    if terminators.contains(&v) {
+                      "list terminator"
+                    } else if TERMINATORS.contains(&v) {
+                      "operation terminator"
+                    } else {
+                      "list element separator"
+                    },
+                    v.to_string()
+                  ))
+                  .unwrap_or_default()
+              )
+              .into(),
+            ),
+          )
+        }
+      },
+    )
   }
 }
 
@@ -207,24 +269,22 @@ mod tests {
   use super::*;
   use crate::util;
 
-  fn tv(tokens: Vec<lexer::Token>) -> Vec<lexer::TokenValue> {
-    tokens.into_iter().map(|t| t.value).collect()
-  }
-
   #[test]
-  fn test_get_list_element_tokens() {
-    let tokens = lexer::lex("Moraru    Mihaela  , Mircea Ioan and Amalia Brad").unwrap();
-    let (got, ..) = get_list_element_tokens(&tokens, &[]).unwrap();
-    let expect = lexer::lex("Moraru Mihaela").unwrap();
-    assert_eq!(tv(got.into()), tv(expect));
-  }
-
-  #[test]
-  fn test_parse_list() {
+  fn parse_list_usual() {
     let tokens = lexer::lex("Moraru   Mihaela  , Mircea Ioan and Amalia Brad.").unwrap();
     let (got, ..) = parse_list(&tokens, &[SEPARATOR]).unwrap();
     let expect = util::to_string_vec(vec!["Moraru Mihaela", "Mircea Ioan", "Amalia Brad"]);
     assert_eq!(got, expect);
+  }
+
+  #[test]
+  fn parse_list_multiple_consecutive_separators() {
+    vec!["Mama, and, Tata.", "Mama,, Tata.", "Mama and and Tata."]
+      .into_iter()
+      .map(lexer::lex)
+      .map(Result::unwrap)
+      .map(|tokens| parse_list(&tokens, &[SEPARATOR]).map(|res| res.0))
+      .for_each(|res| assert!(res.is_err()));
   }
   // TODO: more tests
 }

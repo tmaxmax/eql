@@ -1,10 +1,6 @@
 use unic_ucd_category::GeneralCategory;
 use unicode_segmentation::UnicodeSegmentation;
 
-pub fn repeat_chars(ch: &str, n: usize) -> String {
-  std::iter::repeat(ch).take(n).collect()
-}
-
 pub fn is_alphabetic(s: &str) -> bool {
   s.chars().map(GeneralCategory::of).all(|c| c.is_letter())
 }
@@ -18,10 +14,7 @@ pub fn string_length(word: &str) -> usize {
 }
 
 pub fn fmt_token_pointer(token_value: &str, col: usize) -> (String, String) {
-  (
-    repeat_chars(" ", col - 1),
-    repeat_chars("^", string_length(token_value)),
-  )
+  (" ".repeat(col - 1), "^".repeat(string_length(token_value)))
 }
 
 pub fn fmt_list<'a, T: std::fmt::Display>(elems: &'a [T], sep: &str, linker: &str) -> String {
