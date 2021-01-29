@@ -3,15 +3,25 @@ use bstr::{ByteSlice, B};
 use std::{default, fmt};
 use unicode_segmentation::UnicodeSegmentation;
 
+/// **TokenValue** holds the value type of the token and a reference to the string slice that represents it.
+/// The characters that make up a value type are defined by the Unicode Standard.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TokenValue<'a> {
+  /// **Whitespace** represents any kind of whitespace. It doesn't hold the actual whitespace value
+  /// because EQL treats all whitespace as a Unicode Space (SP) " " character.
   Whitespace,
+  /// **Word** represents a group of letters.
   Word(&'a str),
+  /// **Punctuation** represents a single punctuation character.
   Punctuation(&'a str),
+  /// **Unknown** represents all the Unicode characters that are not valid in EQL source code.
+  /// The value held is used to display error messages.
   Unknown(&'a str),
 }
 
 impl TokenValue<'_> {
+  /// **get_type_and_value** returns a string representation of the value type and a reference to the string slice
+  /// that represents the token's value.
   fn get_type_and_value(&self) -> (&str, &str) {
     match *self {
       Whitespace => ("whitespace", " "),
@@ -21,6 +31,7 @@ impl TokenValue<'_> {
     }
   }
 
+  /// **get** returns a reference to the string slice that represents the token's value.
   pub fn get(&self) -> &str {
     self.get_type_and_value().1
   }
@@ -45,6 +56,8 @@ impl default::Default for TokenValue<'_> {
 
 pub use TokenValue::*;
 
+/// **Token** represents a single valid EQL lexical token. It holds its value, a reference to the
+/// line it's found on, the line number it's found on, and the column it starts at.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Token<'a> {
   pub value: TokenValue<'a>,
@@ -69,6 +82,8 @@ impl<'a> Token<'a> {
   }
 }
 
+/// **Error** represents an invalid token. It implements the fmt::Display trait so a useful error message
+/// can be generated.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Error<'a>(Token<'a>);
 
@@ -91,11 +106,14 @@ impl fmt::Display for Error<'_> {
 
 impl std::error::Error for Error<'_> {}
 
+/// **is_punctuation** checks if the slice is valid EQL punctuation.
 fn is_punctuation(s: &str) -> bool {
   let b = s.as_bytes();
   b.len() == 1 && matches!(b[0], b',' | b'.' | b'!' | b'?')
 }
 
+/// **get_token_value** returns a new TokenValue from a string reference containing the token type
+/// that string represents and the respective value.
 fn get_token_value(s: &str) -> TokenValue {
   match () {
     _ if util::is_whitespace(s) => Whitespace,
@@ -105,6 +123,8 @@ fn get_token_value(s: &str) -> TokenValue {
   }
 }
 
+/// **get_token** creates a new Token from the given parameters and returns it, if its value is not
+/// Unknown, or wraps it in an Error and returns it.
 fn get_token<'a>(
   s: &'a str,
   line_number: usize,
@@ -123,15 +143,52 @@ fn get_token<'a>(
   }
 }
 
+#[allow(clippy::tabs_in_doc_comments)]
+/// **lex** lexes a string and returns a vector of tokens, if the string is valid EQL
+/// source code, or the first error encountered.
+///
+/// # Arguments:
+/// * `s` - The string representing the source code
+///
+/// # Examples:
+///
+/// ```
+/// use eql::lex;
+/// let source = r"
+/// Add
+/// 	Andrew,
+/// 	立顯榮朝士,
+/// 	John
+/// to HR and PR.";
+/// let tokens = lex(source).unwrap();
+/// let source_final: String = tokens.iter().map(|t| t.value.get()).collect();
+/// assert_eq!(source_final, " Add  Andrew,  立顯榮朝士,  John to HR and PR.");
+/// ```
+///
+/// If you want to also parse the source code, there is the convenience function `lex_parse`:
+///
+/// ```
+/// use eql::lex_parse;
+/// use eql::operation::OperationShow;
+/// let source = "Show HR?";
+/// let ops = lex_parse(source).unwrap();
+/// assert_eq!(ops[0], OperationShow::new(vec!["HR".into()], true).into());
+/// ```
+///
+/// **Note:** Make sure that `s` is a valid UTF-8 string, otherwise calling this function
+/// is undefined behavior.
 pub fn lex(s: &str) -> Result<Vec<Token>, Error> {
   B(s)
+    // Line terminaors are required as EQL treats newlines as whitespace
     .lines_with_terminator()
+    // SAFETY: the caller should ensure that the string is valid
     .map(|line| unsafe { line.to_str_unchecked() })
     .enumerate()
     .flat_map(|(line_number, line)| {
       let mut column_number = 1;
       line.split_word_bounds().map(move |token| {
         let res = get_token(token, line_number + 1, column_number, line);
+        // Can't use len() here because a column is represented by a single grapheme.
         column_number += util::string_length(token);
         res
       })
@@ -139,6 +196,7 @@ pub fn lex(s: &str) -> Result<Vec<Token>, Error> {
     .collect()
 }
 
+/// **last_token_value** returns the last token from the string, if not empty.
 pub fn last_token_value(s: &str) -> Option<TokenValue> {
   s.split_word_bounds().map(get_token_value).rev().next()
 }
