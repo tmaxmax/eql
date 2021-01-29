@@ -83,6 +83,7 @@ fn parse_remove<'a, 'b>(
   )
 }
 
+// TODO: Case-insensitive comparison for reserved words
 pub fn parse(tokens: Vec<lexer::Token>) -> Result<Vec<Operation>, Error> {
   let mut res = Vec::new();
 
