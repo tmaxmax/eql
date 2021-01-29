@@ -7,8 +7,7 @@ pub use self::error::*;
 use self::util::*;
 use super::lexer;
 use crate::operation::{
-  Modifier, Operation, OperationAdd, OperationCreate, OperationRemove,
-  OperationShow,
+  Modifier, Operation, OperationAdd, OperationCreate, OperationRemove, OperationShow,
 };
 use std::cmp::min;
 use std::hint;
@@ -46,8 +45,7 @@ fn parse_show<'a, 'b>(
   op_token: lexer::Token<'a>,
   tokens: &'b [lexer::Token<'a>],
 ) -> Result<Operation, Error<'a>> {
-  let error_handler =
-    get_parse_list_error_handler_generator(OperationShow::keyword(), op_token);
+  let error_handler = get_parse_list_error_handler_generator(OperationShow::keyword(), op_token);
   let (departments, i) =
     parse_list(tokens, &TERMINATORS).map_err(error_handler(&TERMINATORS, "department"))?;
   handle_terminator(
@@ -61,8 +59,7 @@ fn parse_remove<'a, 'b>(
   op_token: lexer::Token<'a>,
   tokens: &'b [lexer::Token<'a>],
 ) -> Result<Operation, Error<'a>> {
-  let error_handler =
-    get_parse_list_error_handler_generator(OperationRemove::keyword(), op_token);
+  let error_handler = get_parse_list_error_handler_generator(OperationRemove::keyword(), op_token);
   const LIST_TERMINATORS: [lexer::TokenValue; 4] = [
     LINKER_FROM,
     SEPARATOR,

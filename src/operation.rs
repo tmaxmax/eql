@@ -13,7 +13,7 @@ impl fmt::Display for Modifier {
     f.write_str(match self {
       Modifier::FailSilently => "fail silently",
       Modifier::Overwrite => "overwrite if existing",
-      Modifier::None => ""
+      Modifier::None => "",
     })
   }
 }
@@ -69,7 +69,14 @@ impl OperationAdd {
 
 impl fmt::Display for OperationAdd {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "{} {} to {}{}", OperationAdd::keyword(), fmt_list(&self.names), fmt_list(&self.departments), fmt_modifier(self.modifier))
+    write!(
+      f,
+      "{} {} to {}{}",
+      OperationAdd::keyword(),
+      fmt_list(&self.names),
+      fmt_list(&self.departments),
+      fmt_modifier(self.modifier)
+    )
   }
 }
 
@@ -108,7 +115,13 @@ impl OperationCreate {
 
 impl fmt::Display for OperationCreate {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "{} {}{}", OperationCreate::keyword(), fmt_list(&self.departments), fmt_modifier(self.modifier))
+    write!(
+      f,
+      "{} {}{}",
+      OperationCreate::keyword(),
+      fmt_list(&self.departments),
+      fmt_modifier(self.modifier)
+    )
   }
 }
 
@@ -164,7 +177,14 @@ impl fmt::Display for OperationRemove {
     } else {
       format!(" {} from", names)
     };
-    write!(f, "{}{} {}{}", OperationRemove::keyword(), names, fmt_list(&self.departments), fmt_modifier(self.modifier))
+    write!(
+      f,
+      "{}{} {}{}",
+      OperationRemove::keyword(),
+      names,
+      fmt_list(&self.departments),
+      fmt_modifier(self.modifier)
+    )
   }
 }
 
@@ -211,7 +231,13 @@ impl OperationShow {
 
 impl fmt::Display for OperationShow {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "{} {}{}", OperationShow::keyword(), fmt_list(&self.departments), fmt_modifier(self.modifier))
+    write!(
+      f,
+      "{} {}{}",
+      OperationShow::keyword(),
+      fmt_list(&self.departments),
+      fmt_modifier(self.modifier)
+    )
   }
 }
 
@@ -288,8 +314,8 @@ impl From<OperationShow> for Operation {
 
 impl fmt::Debug for Operation {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    use Operation::*;
     use fmt::Debug;
+    use Operation::*;
 
     match self {
       Unknown => f.write_str(self.keyword()),
@@ -303,8 +329,8 @@ impl fmt::Debug for Operation {
 
 impl fmt::Display for Operation {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    use Operation::*;
     use fmt::Display;
+    use Operation::*;
 
     match self {
       Unknown => f.write_str(self.keyword()),
