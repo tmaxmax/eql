@@ -46,7 +46,12 @@ fn fmt_unexpected(e: &Error) -> String {
           "\n{} on line {}, column {}:
   {}
   {}{}",
-          s, un_token.line_number, un_token.column_number, un_token.line.trim_end(), padding, pointer
+          s,
+          un_token.line_number,
+          un_token.column_number,
+          un_token.line.trim_end(),
+          padding,
+          pointer
         )
       } else {
         let offset = un_token.column_number
