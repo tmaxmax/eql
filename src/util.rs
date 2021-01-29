@@ -14,10 +14,7 @@ pub fn string_length(word: &str) -> usize {
 }
 
 pub fn fmt_token_pointer(token_value: &str, col: usize) -> (String, String) {
-  (
-    " ".repeat(col - 1),
-    "^".repeat(string_length(token_value)),
-  )
+  (" ".repeat(col - 1), "^".repeat(string_length(token_value)))
 }
 
 pub fn fmt_list<'a, T: std::fmt::Display>(elems: &'a [T], sep: &str, linker: &str) -> String {
