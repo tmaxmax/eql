@@ -2,201 +2,317 @@ use crate::util;
 use std::fmt;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum OperationKind {
-  Unknown,
-  Create,
-  Remove,
-  Add,
-  Show,
+pub enum Modifier {
+  FailSilently,
+  Overwrite,
+  None,
 }
 
-impl fmt::Display for OperationKind {
-  fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-    fmt.write_str(match *self {
-      Unknown => "Unknown",
-      Create => "Create",
-      Remove => "Remove",
-      Add => "Add",
-      Show => "Show",
+impl fmt::Display for Modifier {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    f.write_str(match self {
+      Modifier::FailSilently => "fail silently",
+      Modifier::Overwrite => "overwrite if existing",
+      Modifier::None => ""
     })
   }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Operation {
-  kind: OperationKind,
-  departments: Option<Vec<String>>,
-  fail_silently: Option<bool>,
-  names: Option<Vec<String>>,
-  overwrite: Option<bool>,
+fn fmt_list(list: &[String]) -> String {
+  util::fmt_list(list, ", ", "and")
 }
 
-pub use self::OperationKind::*;
+fn fmt_modifier(m: Modifier) -> String {
+  let s = m.to_string();
+  if s.is_empty() {
+    s
+  } else {
+    format!(" ({})", s)
+  }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct OperationAdd {
+  pub names: Vec<String>,
+  pub departments: Vec<String>,
+  modifier: Modifier,
+}
+
+impl OperationAdd {
+  #[inline]
+  pub fn new(departments: Vec<String>, names: Vec<String>, modifier: Modifier) -> Self {
+    Self {
+      departments,
+      names,
+      modifier,
+    }
+  }
+
+  pub const fn keyword() -> &'static str {
+    "Add"
+  }
+
+  #[inline]
+  pub fn modifier(&self) -> Modifier {
+    self.modifier
+  }
+
+  #[inline]
+  pub fn set_modifier(self, modifier: Modifier) -> Option<Self> {
+    Some(Self {
+      departments: self.departments,
+      names: self.names,
+      modifier,
+    })
+  }
+}
+
+impl fmt::Display for OperationAdd {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "{} {} to {}{}", OperationAdd::keyword(), fmt_list(&self.names), fmt_list(&self.departments), fmt_modifier(self.modifier))
+  }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct OperationCreate {
+  pub departments: Vec<String>,
+  modifier: Modifier,
+}
+
+impl OperationCreate {
+  #[inline]
+  pub fn new(departments: Vec<String>, modifier: Modifier) -> Self {
+    Self {
+      departments,
+      modifier,
+    }
+  }
+
+  pub const fn keyword() -> &'static str {
+    "Create"
+  }
+
+  #[inline]
+  pub fn modifier(&self) -> Modifier {
+    self.modifier
+  }
+
+  #[inline]
+  pub fn set_modifier(self, modifier: Modifier) -> Option<Self> {
+    Some(Self {
+      departments: self.departments,
+      modifier,
+    })
+  }
+}
+
+impl fmt::Display for OperationCreate {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "{} {}{}", OperationCreate::keyword(), fmt_list(&self.departments), fmt_modifier(self.modifier))
+  }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct OperationRemove {
+  pub names: Vec<String>,
+  pub departments: Vec<String>,
+  modifier: Modifier,
+}
+
+impl OperationRemove {
+  #[inline]
+  pub fn new(departments: Vec<String>, names: Vec<String>, fail_silently: bool) -> Self {
+    Self {
+      departments,
+      names,
+      modifier: if fail_silently {
+        Modifier::FailSilently
+      } else {
+        Modifier::None
+      },
+    }
+  }
+
+  pub const fn keyword() -> &'static str {
+    "Remove"
+  }
+
+  #[inline]
+  pub fn modifier(&self) -> Modifier {
+    self.modifier
+  }
+
+  #[inline]
+  pub fn set_modifier(self, modifier: Modifier) -> Option<Self> {
+    let new = match modifier {
+      Modifier::FailSilently | Modifier::None => Some(modifier),
+      _ => None,
+    };
+    new.map(|modifier| Self {
+      departments: self.departments,
+      names: self.names,
+      modifier,
+    })
+  }
+}
+
+impl fmt::Display for OperationRemove {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    let names = fmt_list(&self.names);
+    let names = if names.is_empty() {
+      "".into()
+    } else {
+      format!(" {} from", names)
+    };
+    write!(f, "{}{} {}{}", OperationRemove::keyword(), names, fmt_list(&self.departments), fmt_modifier(self.modifier))
+  }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct OperationShow {
+  pub departments: Vec<String>,
+  modifier: Modifier,
+}
+
+impl OperationShow {
+  #[inline]
+  pub fn new(departments: Vec<String>, fail_silently: bool) -> Self {
+    Self {
+      departments,
+      modifier: if fail_silently {
+        Modifier::FailSilently
+      } else {
+        Modifier::None
+      },
+    }
+  }
+
+  pub const fn keyword() -> &'static str {
+    "Show"
+  }
+
+  #[inline]
+  pub fn modifier(&self) -> Modifier {
+    self.modifier
+  }
+
+  #[inline]
+  pub fn set_modifier(self, modifier: Modifier) -> Option<Self> {
+    let new = match modifier {
+      Modifier::FailSilently | Modifier::None => Some(modifier),
+      _ => None,
+    };
+    new.map(|modifier| Self {
+      departments: self.departments,
+      modifier,
+    })
+  }
+}
+
+impl fmt::Display for OperationShow {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "{} {}{}", OperationShow::keyword(), fmt_list(&self.departments), fmt_modifier(self.modifier))
+  }
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub enum Operation {
+  Add(OperationAdd),
+  Create(OperationCreate),
+  Remove(OperationRemove),
+  Show(OperationShow),
+  Unknown,
+}
 
 impl Operation {
-  pub fn unknown() -> Self {
-    Self {
-      kind: Unknown,
-      departments: None,
-      fail_silently: None,
-      names: None,
-      overwrite: None,
+  pub fn modifier(&self) -> Modifier {
+    use Operation::*;
+
+    match self {
+      Add(op) => op.modifier(),
+      Create(op) => op.modifier(),
+      Remove(op) => op.modifier(),
+      Show(op) => op.modifier(),
+      Unknown => Modifier::None,
     }
   }
 
-  pub fn create(departments: Vec<String>, fail_silently: bool, overwrite: bool) -> Self {
-    Self {
-      kind: Create,
-      departments: Some(departments),
-      fail_silently: Some(fail_silently),
-      overwrite: Some(overwrite),
-      ..Self::unknown()
+  pub fn set_modifier(self, modifier: Modifier) -> Option<Self> {
+    use Operation::*;
+
+    match self {
+      Add(op) => op.set_modifier(modifier).map(Into::into),
+      Create(op) => op.set_modifier(modifier).map(Into::into),
+      Remove(op) => op.set_modifier(modifier).map(Into::into),
+      Show(op) => op.set_modifier(modifier).map(Into::into),
+      Unknown => None,
     }
   }
 
-  pub fn remove(departments: Vec<String>, fail_silently: bool, names: Vec<String>) -> Self {
-    Self {
-      kind: Remove,
-      departments: Some(departments),
-      fail_silently: Some(fail_silently),
-      names: Some(names),
-      ..Self::unknown()
+  pub const fn keyword(&self) -> &'static str {
+    use Operation::*;
+
+    match self {
+      Add(_) => OperationAdd::keyword(),
+      Create(_) => OperationCreate::keyword(),
+      Remove(_) => OperationRemove::keyword(),
+      Show(_) => OperationShow::keyword(),
+      Unknown => "Unknown",
     }
-  }
-
-  pub fn add(
-    departments: Vec<String>,
-    fail_silently: bool,
-    names: Vec<String>,
-    overwrite: bool,
-  ) -> Self {
-    Self {
-      kind: Add,
-      departments: Some(departments),
-      fail_silently: Some(fail_silently),
-      names: Some(names),
-      overwrite: Some(overwrite),
-    }
-  }
-
-  pub fn show(departments: Vec<String>, fail_silently: bool) -> Self {
-    Self {
-      kind: Show,
-      departments: Some(departments),
-      fail_silently: Some(fail_silently),
-      ..Self::unknown()
-    }
-  }
-
-  pub fn kind(&self) -> OperationKind {
-    self.kind
-  }
-
-  pub fn get_departments(&self) -> Option<&[String]> {
-    self.departments.as_deref()
-  }
-
-  pub fn departments(&self) -> &[String] {
-    self.get_departments().unwrap()
-  }
-
-  pub fn get_fail_silently(&self) -> Option<bool> {
-    self.fail_silently
-  }
-
-  pub fn fail_silently(&self) -> bool {
-    self.get_fail_silently().unwrap()
-  }
-
-  pub fn get_names(&self) -> Option<&[String]> {
-    self.names.as_deref()
-  }
-
-  pub fn names(&self) -> &[String] {
-    self.get_names().unwrap()
-  }
-
-  pub fn get_overwrite(&self) -> Option<bool> {
-    self.overwrite
-  }
-
-  pub fn overwrite(&self) -> bool {
-    self.get_overwrite().unwrap()
-  }
-
-  pub fn set_departments(self, departments: Vec<String>) -> Option<Self> {
-    self.departments.and(Some(Self {
-      departments: Some(departments),
-      ..self
-    }))
-  }
-
-  pub fn set_fail_silently(self, fail_silently: bool) -> Option<Self> {
-    self.fail_silently.and(Some(Self {
-      fail_silently: Some(fail_silently),
-      ..self
-    }))
-  }
-
-  pub fn set_names(self, names: Vec<String>) -> Option<Self> {
-    self.names.and(Some(Self {
-      names: Some(names),
-      ..self
-    }))
-  }
-
-  pub fn set_overwrite(self, overwrite: bool) -> Option<Self> {
-    self.overwrite.and(Some(Self {
-      overwrite: Some(overwrite),
-      ..self
-    }))
   }
 }
 
-fn fmt_modifier(op: &Operation) -> &'static str {
-  if op.get_fail_silently().unwrap_or_default() {
-    " (fail silently)"
-  } else if op.get_overwrite().unwrap_or_default() {
-    " (overwrite if existing)"
-  } else {
-    ""
+impl From<OperationAdd> for Operation {
+  fn from(op: OperationAdd) -> Self {
+    Operation::Add(op)
   }
 }
 
-fn fmt_names(elems: &[String], linker: &str) -> String {
-  let names = util::fmt_list(elems, ", ", "and");
-  if names.is_empty() {
-    names
-  } else {
-    format!(" {} {}", names, linker)
+impl From<OperationCreate> for Operation {
+  fn from(op: OperationCreate) -> Self {
+    Operation::Create(op)
+  }
+}
+
+impl From<OperationRemove> for Operation {
+  fn from(op: OperationRemove) -> Self {
+    Operation::Remove(op)
+  }
+}
+
+impl From<OperationShow> for Operation {
+  fn from(op: OperationShow) -> Self {
+    Operation::Show(op)
+  }
+}
+
+impl fmt::Debug for Operation {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    use Operation::*;
+    use fmt::Debug;
+
+    match self {
+      Unknown => f.write_str(self.keyword()),
+      Add(op) => Debug::fmt(op, f),
+      Create(op) => Debug::fmt(op, f),
+      Remove(op) => Debug::fmt(op, f),
+      Show(op) => Debug::fmt(op, f),
+    }
   }
 }
 
 impl fmt::Display for Operation {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    let statement = match self.kind() {
-      Unknown => return self.kind().fmt(f),
-      Create | Show => self.kind().to_string(),
-      _ => format!(
-        "{}{}",
-        self.kind(),
-        fmt_names(
-          self.names(),
-          match self.kind() {
-            Add => "to",
-            Remove => "from",
-            _ => "",
-          }
-        )
-      ),
-    };
-    write!(
-      f,
-      "{} {}{}",
-      statement,
-      util::fmt_list(self.departments(), ", ", "and"),
-      fmt_modifier(self)
-    )
+    use Operation::*;
+    use fmt::Display;
+
+    match self {
+      Unknown => f.write_str(self.keyword()),
+      Add(op) => Display::fmt(op, f),
+      Create(op) => Display::fmt(op, f),
+      Remove(op) => Display::fmt(op, f),
+      Show(op) => Display::fmt(op, f),
+    }
   }
 }
 
@@ -207,30 +323,31 @@ mod test {
   #[test]
   fn format() {
     let ops = &[
-      (Operation::unknown(), "Unknown"),
+      (Operation::Unknown, "Unknown"),
       (
-        Operation::add(
+        OperationAdd::new(
           util::to_string_vec(vec!["Science", "Engineering"]),
-          false,
           vec!["Mama".into(), "Tata".into(), "Bunica Miha".into()],
-          false,
-        ),
+          Modifier::None,
+        )
+        .into(),
         "Add Mama, Tata, and Bunica Miha to Science and Engineering",
       ),
       (
-        Operation::remove(
+        OperationRemove::new(
           util::to_string_vec(vec!["Engineering"]),
-          true,
           vec!["Sally".into()],
-        ),
+          true,
+        )
+        .into(),
         "Remove Sally from Engineering (fail silently)",
       ),
       (
-        Operation::create(util::to_string_vec(vec!["Sales"]), false, true),
+        OperationCreate::new(util::to_string_vec(vec!["Sales"]), Modifier::Overwrite).into(),
         "Create Sales (overwrite if existing)",
       ),
       (
-        Operation::show(util::to_string_vec(vec!["HR"]), false),
+        OperationShow::new(util::to_string_vec(vec!["HR"]), false).into(),
         "Show HR",
       ),
     ];

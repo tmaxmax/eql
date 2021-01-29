@@ -6,7 +6,10 @@ use self::constants::*;
 pub use self::error::*;
 use self::util::*;
 use super::lexer;
-use crate::operation::{self, Operation};
+use crate::operation::{
+  Modifier, Operation, OperationAdd, OperationCreate, OperationRemove,
+  OperationShow,
+};
 use std::cmp::min;
 use std::hint;
 
@@ -14,13 +17,13 @@ fn parse_add<'a, 'b>(
   op_token: lexer::Token<'a>,
   tokens: &'b [lexer::Token<'a>],
 ) -> Result<Operation, Error<'a>> {
-  let error_handler = get_parse_list_error_handler_generator(operation::Add, op_token);
+  let error_handler = get_parse_list_error_handler_generator(OperationAdd::keyword(), op_token);
   let (names, i) = parse_list(tokens, &[LINKER_TO]).map_err(error_handler(&[LINKER_TO], "name"))?;
   let (departments, j) = parse_list(&tokens[i + 1..], &TERMINATORS)
     .map_err(error_handler(&TERMINATORS, "department"))?;
   handle_terminator(
     &tokens[min(i + j + 1, tokens.len())..],
-    Operation::add(departments, false, names, false),
+    OperationAdd::new(departments, names, Modifier::None).into(),
     op_token,
   )
 }
@@ -29,12 +32,12 @@ fn parse_create<'a, 'b>(
   op_token: lexer::Token<'a>,
   tokens: &'b [lexer::Token<'a>],
 ) -> Result<Operation, Error<'a>> {
-  let error_handler = get_parse_list_error_handler_generator(operation::Create, op_token);
+  let error_handler = get_parse_list_error_handler_generator(OperationCreate::keyword(), op_token);
   let (departments, i) =
     parse_list(tokens, &TERMINATORS).map_err(error_handler(&TERMINATORS, "department"))?;
   handle_terminator(
     &tokens[min(i, tokens.len())..],
-    Operation::create(departments, false, false),
+    OperationCreate::new(departments, Modifier::None).into(),
     op_token,
   )
 }
@@ -43,12 +46,13 @@ fn parse_show<'a, 'b>(
   op_token: lexer::Token<'a>,
   tokens: &'b [lexer::Token<'a>],
 ) -> Result<Operation, Error<'a>> {
-  let error_handler = get_parse_list_error_handler_generator(operation::Show, op_token);
+  let error_handler =
+    get_parse_list_error_handler_generator(OperationShow::keyword(), op_token);
   let (departments, i) =
     parse_list(tokens, &TERMINATORS).map_err(error_handler(&TERMINATORS, "department"))?;
   handle_terminator(
     &tokens[min(i, tokens.len())..],
-    Operation::show(departments, false),
+    OperationShow::new(departments, false).into(),
     op_token,
   )
 }
@@ -57,7 +61,8 @@ fn parse_remove<'a, 'b>(
   op_token: lexer::Token<'a>,
   tokens: &'b [lexer::Token<'a>],
 ) -> Result<Operation, Error<'a>> {
-  let error_handler = get_parse_list_error_handler_generator(operation::Remove, op_token);
+  let error_handler =
+    get_parse_list_error_handler_generator(OperationRemove::keyword(), op_token);
   const LIST_TERMINATORS: [lexer::TokenValue; 4] = [
     LINKER_FROM,
     SEPARATOR,
@@ -76,7 +81,7 @@ fn parse_remove<'a, 'b>(
   };
   handle_terminator(
     &tokens[min(i + j, tokens.len())..],
-    Operation::remove(names, false, departments),
+    OperationRemove::new(names, departments, false).into(),
     op_token,
   )
 }
@@ -102,7 +107,7 @@ pub fn parse(tokens: Vec<lexer::Token>) -> Result<Vec<Operation>, Error> {
       }
       _ => {
         return Err(Error::new(
-          operation::Unknown,
+          Operation::Unknown.keyword(),
           token,
           Some(token),
           Some({
@@ -110,7 +115,7 @@ pub fn parse(tokens: Vec<lexer::Token>) -> Result<Vec<Operation>, Error> {
             k.into()
           }),
           Some("You must input an operation!".into()),
-        ))
+        ));
       }
     }
     i += 1;
@@ -139,12 +144,14 @@ mod tests {
     let expect: &[FnExpect] = &[
       |res| {
         res
-          == Ok(Operation::add(
-            util::to_string_vec(vec!["Science", "Engineering"]),
-            false,
-            util::to_string_vec(vec!["Mihai", "Andrei", "Ioan"]),
-            true,
-          ))
+          == Ok(
+            OperationAdd::new(
+              util::to_string_vec(vec!["Science", "Engineering"]),
+              util::to_string_vec(vec!["Mihai", "Andrei", "Ioan"]),
+              Modifier::Overwrite,
+            )
+            .into(),
+          )
       },
       |res| res.is_err(),
       |res| res.is_err(),
@@ -164,11 +171,11 @@ mod tests {
   #[test]
   fn test_parse_create() {
     let tokens = lexer::lex("Create Science, Engineering and Physics.").unwrap();
-    let expect = Operation::create(
+    let expect = OperationCreate::new(
       util::to_string_vec(vec!["Science", "Engineering", "Physics"]),
-      false,
-      false,
-    );
+      Modifier::None,
+    )
+    .into();
     let got = parse(tokens).unwrap();
     assert_eq!(got[0], expect);
   }
@@ -176,10 +183,11 @@ mod tests {
   #[test]
   fn test_parse_show() {
     let tokens = lexer::lex("Show Science, Engineering and Physics?").unwrap();
-    let expect = Operation::show(
+    let expect = OperationShow::new(
       util::to_string_vec(vec!["Science", "Engineering", "Physics"]),
       true,
-    );
+    )
+    .into();
     let got = parse(tokens).unwrap();
     assert_eq!(got[0], expect);
   }
@@ -188,12 +196,13 @@ mod tests {
   fn test_parse_remove() {
     let source = vec!["Remove Science.", "Remove Michael from Physics?"];
     let expect = vec![
-      Operation::remove(util::to_string_vec(vec!["Science"]), false, vec![]),
-      Operation::remove(
+      OperationRemove::new(util::to_string_vec(vec!["Science"]), vec![], false).into(),
+      OperationRemove::new(
         util::to_string_vec(vec!["Physics"]),
-        true,
         util::to_string_vec(vec!["Michael"]),
-      ),
+        true,
+      )
+      .into(),
     ];
     source
       .into_iter()
