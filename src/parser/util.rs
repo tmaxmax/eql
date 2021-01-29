@@ -113,7 +113,6 @@ pub struct ParseListError<'a> {
   has_parsed_elements: bool,
 }
 
-// FIXME: Handle "elem, and elem" case
 pub fn parse_list<'a, 'b>(
   tokens: &'b [lexer::Token<'a>],
   terminators: &[lexer::TokenValue],
